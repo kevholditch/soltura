@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soltura — Spanish Companion</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            terracotta: '#C1440E',
+            saffron: '#F5A623',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col">
+
+  <!-- Nav -->
+  <nav id="nav" class="border-b border-gray-800 bg-gray-950 sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <span class="font-fraunces text-xl font-semibold text-amber-100 tracking-tight">Soltura</span>
+      <button id="vocab-btn" class="text-sm text-gray-400 hover:text-gray-200 transition-colors px-3 py-1.5 rounded-md hover:bg-gray-800 font-mono">
+        Vocabulary
+      </button>
+    </div>
+  </nav>
+
+  <!-- View: Start Screen -->
+  <div id="view-start" class="flex-1 flex items-center justify-center px-4">
+    <div class="w-full max-w-lg">
+      <div class="text-center mb-12">
+        <h1 class="font-fraunces text-6xl font-bold text-amber-100 mb-3 leading-tight">Soltura</h1>
+        <p class="text-gray-400 text-lg font-mono">Your Spanish conversation partner</p>
+      </div>
+
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
+        <label for="topic-input" class="block text-sm font-mono text-gray-400 mb-3 uppercase tracking-wider">
+          What would you like to talk about?
+        </label>
+        <input
+          id="topic-input"
+          type="text"
+          placeholder="e.g. My weekend plans, favourite films, cooking..."
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 font-mono text-sm placeholder-gray-600 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-colors mb-5"
+        />
+        <button
+          id="start-btn"
+          class="w-full bg-terracotta hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors font-mono text-sm uppercase tracking-wider"
+          style="background-color: #C1440E;"
+          onmouseover="this.style.backgroundColor='#a33a0c'"
+          onmouseout="this.style.backgroundColor='#C1440E'"
+        >
+          Start Session
+        </button>
+      </div>
+
+      <p class="text-center text-gray-600 text-xs font-mono mt-6">
+        Press Enter to start &middot; Cmd+Enter to send messages
+      </p>
+    </div>
+  </div>
+
+  <!-- View: Conversation Screen -->
+  <div id="view-conversation" class="hidden flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 py-4" style="height: calc(100vh - 3.5rem);">
+
+    <!-- Session header -->
+    <div class="flex items-center justify-between mb-4 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-mono text-gray-500 uppercase tracking-wider">Topic</span>
+        <span id="session-topic" class="font-fraunces text-amber-200 font-semibold text-lg"></span>
+      </div>
+      <button
+        id="end-session-btn"
+        class="text-sm font-mono text-gray-400 hover:text-red-400 transition-colors px-3 py-1.5 rounded-md hover:bg-gray-900 border border-gray-800 hover:border-red-900"
+      >
+        End Session
+      </button>
+    </div>
+
+    <!-- Message thread -->
+    <div
+      id="message-thread"
+      class="flex-1 overflow-y-auto space-y-4 pr-1 pb-4"
+      style="min-height: 0;"
+    ></div>
+
+    <!-- Input area -->
+    <div class="flex-shrink-0 mt-4 bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <textarea
+        id="user-input"
+        rows="3"
+        placeholder="Write in Spanish... (Cmd+Enter to send)"
+        class="w-full bg-transparent text-gray-100 font-mono text-sm placeholder-gray-600 focus:outline-none resize-none leading-relaxed"
+      ></textarea>
+      <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-800">
+        <span class="text-xs font-mono text-gray-600">Cmd+Enter to send</span>
+        <button
+          id="submit-btn"
+          class="font-mono text-sm px-5 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          style="background-color: #C1440E;"
+          onmouseover="if(!this.disabled) this.style.backgroundColor='#a33a0c'"
+          onmouseout="this.style.backgroundColor='#C1440E'"
+        >
+          Send →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View: Summary Screen -->
+  <div id="view-summary" class="hidden flex-1 flex items-start justify-center px-4 py-12">
+    <div class="w-full max-w-2xl">
+      <div class="text-center mb-8">
+        <h2 class="font-fraunces text-4xl font-bold text-amber-100 mb-2">Session Complete</h2>
+        <p class="text-gray-500 font-mono text-sm">Here's how you did</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-2 gap-4 mb-8">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+          <div id="summary-turns" class="font-fraunces text-5xl font-bold text-amber-300 mb-2">0</div>
+          <div class="text-gray-500 font-mono text-xs uppercase tracking-wider">Turns</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+          <div id="summary-corrections" class="font-fraunces text-5xl font-bold text-orange-400 mb-2">0</div>
+          <div class="text-gray-500 font-mono text-xs uppercase tracking-wider">Corrections</div>
+        </div>
+      </div>
+
+      <!-- Summary text -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
+        <h3 class="font-fraunces text-lg text-amber-200 mb-4 font-semibold">Feedback</h3>
+        <p id="summary-text" class="text-gray-300 font-mono text-sm leading-relaxed whitespace-pre-wrap"></p>
+      </div>
+
+      <button
+        id="new-session-btn"
+        class="w-full font-mono text-sm py-3 px-6 rounded-lg text-white font-semibold uppercase tracking-wider transition-colors"
+        style="background-color: #C1440E;"
+        onmouseover="this.style.backgroundColor='#a33a0c'"
+        onmouseout="this.style.backgroundColor='#C1440E'"
+      >
+        Start New Session
+      </button>
+    </div>
+  </div>
+
+  <!-- View: Vocabulary Screen -->
+  <div id="view-vocab" class="hidden flex-1 flex flex-col max-w-4xl w-full mx-auto px-4 py-8">
+    <div class="flex items-center justify-between mb-6 flex-shrink-0">
+      <h2 class="font-fraunces text-3xl font-bold text-amber-100">Vocabulary</h2>
+      <button
+        id="back-from-vocab"
+        class="text-sm font-mono text-gray-400 hover:text-gray-200 transition-colors px-3 py-1.5 rounded-md hover:bg-gray-800 border border-gray-800"
+      >
+        ← Back
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <table class="w-full text-sm font-mono">
+        <thead class="sticky top-0 bg-gray-950">
+          <tr class="border-b border-gray-800">
+            <th class="text-left py-3 px-4 text-gray-500 uppercase tracking-wider text-xs font-medium">Original</th>
+            <th class="text-left py-3 px-4 text-gray-500 uppercase tracking-wider text-xs font-medium">Corrected</th>
+            <th class="text-left py-3 px-4 text-gray-500 uppercase tracking-wider text-xs font-medium">Category</th>
+            <th class="text-right py-3 px-4 text-gray-500 uppercase tracking-wider text-xs font-medium">Times Seen</th>
+          </tr>
+        </thead>
+        <tbody id="vocab-tbody" class="divide-y divide-gray-900">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+      <div id="vocab-empty" class="hidden text-center py-16 text-gray-600 font-mono text-sm">
+        No corrections recorded yet. Start a session to build your vocabulary list.
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

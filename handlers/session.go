@@ -1,0 +1,218 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"soltura/anthropic"
+	"soltura/models"
+	"soltura/prompts"
+	"soltura/store"
+)
+
+type SessionHandler struct {
+	store  store.Store
+	client *anthropic.Client
+}
+
+func NewSessionHandler(s store.Store, c *anthropic.Client) *SessionHandler {
+	return &SessionHandler{store: s, client: c}
+}
+
+func writeSSE(w http.ResponseWriter, flusher http.Flusher, data string) {
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+}
+
+// Create handles POST /api/sessions
+func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Topic string `json:"topic"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	session, err := s.store.CreateSession(body.Topic)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	prompt := "Write a 3-4 sentence Spanish paragraph about: " + body.Topic + ". Pitch it at C1 level. End with a question for the learner. Respond ONLY with the paragraph, nothing else."
+	seedContent, err := s.client.Complete(r.Context(), "", []anthropic.Message{{Role: "user", Content: prompt}})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"session_id":   session.ID,
+		"seed_content": seedContent,
+	})
+}
+
+// Turn handles POST /api/sessions/{sessionID}/turns
+func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	var body struct {
+		UserText string              `json:"user_text"`
+		History  []anthropic.Message `json:"history"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	userText := body.UserText
+	history := body.History
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+
+	session, err := s.store.GetSession(sessionID)
+	if err != nil {
+		errData, _ := json.Marshal(map[string]string{"type": "error", "error": err.Error()})
+		writeSSE(w, flusher, string(errData))
+		return
+	}
+
+	// Limit history to last 40 messages
+	if len(history) > 40 {
+		history = history[len(history)-40:]
+	}
+
+	// Append user message to history for conversation call
+	msgs := append(history, anthropic.Message{Role: "user", Content: userText})
+
+	var fullReply string
+	var corrections []models.Correction
+	var corrErr error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Goroutine A: streaming conversation reply
+	go func() {
+		defer wg.Done()
+		system := prompts.ConversationSystem(session.Topic)
+		var streamErr error
+		fullReply, streamErr = s.client.StreamCompletion(ctx, system, msgs, func(chunk string) {
+			data, _ := json.Marshal(map[string]string{"type": "chunk", "text": chunk})
+			writeSSE(w, flusher, string(data))
+		})
+		if streamErr != nil {
+			log.Printf("stream error: %v", streamErr)
+		}
+	}()
+
+	// Goroutine B: correction analysis
+	go func() {
+		defer wg.Done()
+		corrPrompt := prompts.CorrectionAnalysis(userText)
+		corrMsgs := []anthropic.Message{{Role: "user", Content: corrPrompt}}
+		result, err := s.client.Complete(ctx, "", corrMsgs)
+		if err != nil {
+			corrErr = err
+			log.Printf("correction error: %v", err)
+			return
+		}
+
+		// Strip markdown code fences if present
+		cleaned := strings.TrimSpace(result)
+		if strings.HasPrefix(cleaned, "```") {
+			lines := strings.Split(cleaned, "\n")
+			if len(lines) > 2 {
+				cleaned = strings.Join(lines[1:len(lines)-1], "\n")
+			}
+		}
+
+		var rawCorrections []struct {
+			Original    string `json:"original"`
+			Corrected   string `json:"corrected"`
+			Explanation string `json:"explanation"`
+			Category    string `json:"category"`
+		}
+		if err := json.Unmarshal([]byte(cleaned), &rawCorrections); err != nil {
+			log.Printf("parse corrections error: %v, raw: %s", err, result)
+			return
+		}
+		for _, rc := range rawCorrections {
+			corrections = append(corrections, models.Correction{
+				Original:    rc.Original,
+				Corrected:   rc.Corrected,
+				Explanation: rc.Explanation,
+				Category:    rc.Category,
+			})
+		}
+	}()
+
+	wg.Wait()
+
+	// Suppress unused variable warning
+	_ = corrErr
+
+	// Save turn and vocab
+	_, err = s.store.SaveTurn(sessionID, userText, fullReply, corrections)
+	if err != nil {
+		log.Printf("save turn error: %v", err)
+	}
+	if len(corrections) > 0 {
+		s.store.UpsertVocab(corrections)
+	}
+
+	// Ensure corrections is not nil for JSON serialisation
+	if corrections == nil {
+		corrections = []models.Correction{}
+	}
+
+	corrData, _ := json.Marshal(map[string]interface{}{"type": "corrections", "corrections": corrections})
+	writeSSE(w, flusher, string(corrData))
+
+	writeSSE(w, flusher, `{"type":"done"}`)
+}
+
+// End handles POST /api/sessions/{sessionID}/end
+func (s *SessionHandler) End(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	if err := s.store.EndSession(sessionID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
