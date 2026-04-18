@@ -1,4 +1,4 @@
-OLLAMA_MODEL := gemma4:27b
+OLLAMA_MODEL := gemma3:12b
 
 # Capture the backend name when passed as a second word, e.g. "make run gemma"
 BACKEND := $(filter anthropic gemma,$(MAKECMDGOALS))

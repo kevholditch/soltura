@@ -48,7 +48,7 @@ func newLLMClient() (llm.Completer, func()) {
 		}
 		model := os.Getenv("OLLAMA_MODEL")
 		if model == "" {
-			model = "gemma4:27b"
+			model = "gemma3:12b"
 		}
 		server, err := ollama.EnsureServer(baseURL)
 		if err != nil {
