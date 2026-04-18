@@ -4,7 +4,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -32,7 +34,7 @@ func loadEnv() {
 	}
 }
 
-func newLLMClient() llm.Completer {
+func newLLMClient() (llm.Completer, func()) {
 	backend := strings.ToLower(os.Getenv("LLM_BACKEND"))
 	if backend == "" {
 		backend = "anthropic"
@@ -48,8 +50,12 @@ func newLLMClient() llm.Completer {
 		if model == "" {
 			model = "gemma4:27b"
 		}
+		server, err := ollama.EnsureServer(baseURL)
+		if err != nil {
+			log.Fatalf("ollama: %v", err)
+		}
 		log.Printf("LLM backend: ollama  url=%s  model=%s", baseURL, model)
-		return ollama.NewClient(baseURL, model)
+		return ollama.NewClient(baseURL, model), server.Stop
 
 	case "anthropic":
 		apiKey := os.Getenv("ANTHROPIC_API_KEY")
@@ -57,11 +63,11 @@ func newLLMClient() llm.Completer {
 			log.Fatal("ANTHROPIC_API_KEY environment variable is required when LLM_BACKEND=anthropic")
 		}
 		log.Printf("LLM backend: anthropic")
-		return anthropic.NewClient(apiKey)
+		return anthropic.NewClient(apiKey), func() {}
 
 	default:
 		log.Fatalf("unknown LLM_BACKEND %q — valid values: anthropic, ollama", backend)
-		return nil
+		return nil, func() {}
 	}
 }
 
@@ -73,7 +79,17 @@ func main() {
 		log.Fatalf("failed to open database: %v", err)
 	}
 
-	client := newLLMClient()
+	client, stopLLM := newLLMClient()
+
+	// Graceful shutdown: stop the LLM server on SIGINT / SIGTERM
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		log.Println("shutting down...")
+		stopLLM()
+		os.Exit(0)
+	}()
 
 	sessionHandler := handlers.NewSessionHandler(sqliteStore, client)
 	summaryHandler := handlers.NewSummaryHandler(sqliteStore, client)
