@@ -54,6 +54,10 @@ func newLLMClient() (llm.Completer, func()) {
 		if err != nil {
 			log.Fatalf("ollama: %v", err)
 		}
+		if err := ollama.EnsureModel(baseURL, model); err != nil {
+			server.Stop()
+			log.Fatalf("ollama: %v", err)
+		}
 		log.Printf("LLM backend: ollama  url=%s  model=%s", baseURL, model)
 		return ollama.NewClient(baseURL, model), server.Stop
 

@@ -25,6 +25,11 @@ async function startSession(topic) {
   startBtn.disabled = true;
   startBtn.textContent = 'Starting…';
 
+  // Hide any previous start-screen error
+  const startError = document.getElementById('start-error');
+  startError.classList.add('hidden');
+  startError.textContent = '';
+
   try {
     const res = await fetch('/api/sessions', {
       method: 'POST',
@@ -32,19 +37,17 @@ async function startSession(topic) {
       body: JSON.stringify({ topic })
     });
 
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Server error: ${res.status}`);
+    }
 
     const data = await res.json();
     sessionId = data.session_id;
     history = [];
 
-    // Clear message thread
     document.getElementById('message-thread').innerHTML = '';
-
-    // Display session topic
     document.getElementById('session-topic').textContent = topic;
-
-    // Display seed content as first agent message
     addMessage('assistant', data.seed_content);
     history.push({ role: 'assistant', content: data.seed_content });
 
@@ -52,7 +55,8 @@ async function startSession(topic) {
     document.getElementById('user-input').focus();
   } catch (err) {
     console.error('Failed to start session:', err);
-    showError('Failed to start session. Is the server running?');
+    startError.textContent = err.message;
+    startError.classList.remove('hidden');
   } finally {
     startBtn.disabled = false;
     startBtn.textContent = 'Start Session';
@@ -67,7 +71,11 @@ function addMessage(role, text) {
 
   const bubble = document.createElement('div');
   bubble.className = role === 'user' ? 'user-bubble' : 'agent-bubble';
-  bubble.textContent = text;
+  if (role === 'assistant') {
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
   div.appendChild(bubble);
   thread.appendChild(div);
   thread.scrollTop = thread.scrollHeight;
@@ -139,7 +147,7 @@ async function submitTurn(userText) {
           const event = JSON.parse(jsonStr);
           if (event.type === 'chunk') {
             currentAgentText += event.text;
-            agentBubble.textContent = currentAgentText;
+            agentBubble.innerHTML = marked.parse(currentAgentText);
             thread.scrollTop = thread.scrollHeight;
           } else if (event.type === 'corrections') {
             agentBubble.classList.remove('streaming');
@@ -218,7 +226,7 @@ async function endSession() {
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
     const data = await res.json();
 
-    document.getElementById('summary-text').textContent = data.summary || 'No summary available.';
+    document.getElementById('summary-text').innerHTML = marked.parse(data.summary || 'No summary available.');
     document.getElementById('summary-turns').textContent = data.turn_count ?? '—';
     document.getElementById('summary-corrections').textContent = data.correction_count ?? '—';
 

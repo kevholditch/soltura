@@ -2,6 +2,7 @@ package ollama
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -63,6 +64,35 @@ func (s *Server) Stop() {
 		s.cmd.Process.Kill()
 	}
 	s.cmd.Wait()
+}
+
+// EnsureModel checks that model is available locally. Returns a clear error
+// with instructions if it is not, so the server fails fast instead of letting
+// every API call fail silently.
+func EnsureModel(baseURL, model string) error {
+	modelsURL := strings.TrimRight(baseURL, "/") + "/v1/models"
+	c := &http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Get(modelsURL)
+	if err != nil {
+		return fmt.Errorf("could not reach Ollama to check models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("could not parse model list: %w", err)
+	}
+
+	for _, m := range result.Data {
+		if m.ID == model {
+			return nil
+		}
+	}
+	return fmt.Errorf("model %q is not pulled — run: make install-model", model)
 }
 
 func ping(url string) bool {
