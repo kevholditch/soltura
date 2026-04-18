@@ -8,17 +8,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"soltura/anthropic"
+	
 	"soltura/prompts"
+	"soltura/llm"
 	"soltura/store"
 )
 
 type SummaryHandler struct {
 	store  store.Store
-	client *anthropic.Client
+	client llm.Completer
 }
 
-func NewSummaryHandler(s store.Store, c *anthropic.Client) *SummaryHandler {
+func NewSummaryHandler(s store.Store, c llm.Completer) *SummaryHandler {
 	return &SummaryHandler{store: s, client: c}
 }
 
@@ -71,7 +72,7 @@ func (s *SummaryHandler) Get(w http.ResponseWriter, r *http.Request) {
 	correctionsJSON := string(correctionsBytes)
 
 	summaryPrompt := prompts.SessionSummary(session.Topic, duration, len(turns), correctionsJSON)
-	summary, err := s.client.Complete(r.Context(), "", []anthropic.Message{{Role: "user", Content: summaryPrompt}})
+	summary, err := s.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: summaryPrompt}})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

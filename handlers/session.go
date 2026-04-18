@@ -12,7 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"soltura/anthropic"
+	
+	"soltura/llm"
 	"soltura/models"
 	"soltura/prompts"
 	"soltura/store"
@@ -20,10 +21,10 @@ import (
 
 type SessionHandler struct {
 	store  store.Store
-	client *anthropic.Client
+	client llm.Completer
 }
 
-func NewSessionHandler(s store.Store, c *anthropic.Client) *SessionHandler {
+func NewSessionHandler(s store.Store, c llm.Completer) *SessionHandler {
 	return &SessionHandler{store: s, client: c}
 }
 
@@ -53,7 +54,7 @@ func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prompt := "Write a 3-4 sentence Spanish paragraph about: " + body.Topic + ". Pitch it at C1 level. End with a question for the learner. Respond ONLY with the paragraph, nothing else."
-	seedContent, err := s.client.Complete(r.Context(), "", []anthropic.Message{{Role: "user", Content: prompt}})
+	seedContent, err := s.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: prompt}})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -74,7 +75,7 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		UserText string              `json:"user_text"`
-		History  []anthropic.Message `json:"history"`
+		History  []llm.Message `json:"history"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -113,7 +114,7 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Append user message to history for conversation call
-	msgs := append(history, anthropic.Message{Role: "user", Content: userText})
+	msgs := append(history, llm.Message{Role: "user", Content: userText})
 
 	var fullReply string
 	var corrections []models.Correction
@@ -140,7 +141,7 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer wg.Done()
 		corrPrompt := prompts.CorrectionAnalysis(userText)
-		corrMsgs := []anthropic.Message{{Role: "user", Content: corrPrompt}}
+		corrMsgs := []llm.Message{{Role: "user", Content: corrPrompt}}
 		result, err := s.client.Complete(ctx, "", corrMsgs)
 		if err != nil {
 			corrErr = err
