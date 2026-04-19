@@ -21,14 +21,26 @@ function showView(viewId) {
 // Start session
 async function startSession(topic) {
   const startBtn = document.getElementById('start-btn');
-  const topicInput = document.getElementById('topic-input');
-  startBtn.disabled = true;
-  startBtn.textContent = 'Starting…';
-
-  // Hide any previous start-screen error
   const startError = document.getElementById('start-error');
   startError.classList.add('hidden');
   startError.textContent = '';
+
+  // Switch to conversation view immediately so the user gets feedback
+  document.getElementById('message-thread').innerHTML = '';
+  document.getElementById('session-topic').textContent = topic;
+  showView('view-conversation');
+
+  // Show a loading bubble while we wait for the opening question
+  const thread = document.getElementById('message-thread');
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'agent-message';
+  const loadingBubble = document.createElement('div');
+  loadingBubble.className = 'agent-bubble loading-bubble';
+  loadingBubble.innerHTML = '<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>';
+  loadingDiv.appendChild(loadingBubble);
+  thread.appendChild(loadingDiv);
+
+  startBtn.disabled = true;
 
   try {
     const res = await fetch('/api/sessions', {
@@ -46,15 +58,16 @@ async function startSession(topic) {
     sessionId = data.session_id;
     history = [];
 
-    document.getElementById('message-thread').innerHTML = '';
-    document.getElementById('session-topic').textContent = topic;
+    // Replace loading bubble with the actual opening question
+    loadingDiv.remove();
     addMessage('assistant', data.seed_content);
     history.push({ role: 'assistant', content: data.seed_content });
 
-    showView('view-conversation');
     document.getElementById('user-input').focus();
   } catch (err) {
     console.error('Failed to start session:', err);
+    loadingDiv.remove();
+    showView('view-start');
     startError.textContent = err.message;
     startError.classList.remove('hidden');
   } finally {
@@ -109,8 +122,8 @@ async function submitTurn(userText) {
   const agentDiv = document.createElement('div');
   agentDiv.className = 'agent-message';
   const agentBubble = document.createElement('div');
-  agentBubble.className = 'agent-bubble streaming';
-  agentBubble.textContent = '';
+  agentBubble.className = 'agent-bubble streaming loading-bubble';
+  agentBubble.innerHTML = '<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>';
   agentDiv.appendChild(agentBubble);
   thread.appendChild(agentDiv);
   thread.scrollTop = thread.scrollHeight;
@@ -146,6 +159,7 @@ async function submitTurn(userText) {
         try {
           const event = JSON.parse(jsonStr);
           if (event.type === 'chunk') {
+            if (!currentAgentText) agentBubble.classList.remove('loading-bubble');
             currentAgentText += event.text;
             agentBubble.innerHTML = marked.parse(currentAgentText);
             thread.scrollTop = thread.scrollHeight;

@@ -53,7 +53,7 @@ func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := "Write a 3-4 sentence Spanish paragraph about: " + body.Topic + ". Pitch it at C1 level. End with a question for the learner. Respond ONLY with the paragraph, nothing else."
+	prompt := "Ask a single short, natural opening question in Spanish to start a conversation about: " + body.Topic + ". One sentence only. No preamble, no introduction, no explanation."
 	seedContent, err := s.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: prompt}})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
