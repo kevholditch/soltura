@@ -52,6 +52,7 @@
           placeholder="e.g. My weekend plans, favourite films, cooking..."
           class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 font-mono text-sm placeholder-gray-600 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-colors mb-5"
         />
+        <p id="start-error" class="hidden text-red-400 font-mono text-sm mb-4 text-center"></p>
         <button
           id="start-btn"
           class="w-full bg-terracotta hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors font-mono text-sm uppercase tracking-wider"
@@ -139,7 +140,7 @@
       <!-- Summary text -->
       <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-8">
         <h3 class="font-fraunces text-lg text-amber-200 mb-4 font-semibold">Feedback</h3>
-        <p id="summary-text" class="text-gray-300 font-mono text-sm leading-relaxed whitespace-pre-wrap"></p>
+        <div id="summary-text" class="text-gray-300 font-mono text-sm leading-relaxed prose prose-invert max-w-none"></div>
       </div>
 
       <button
@@ -186,6 +187,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
