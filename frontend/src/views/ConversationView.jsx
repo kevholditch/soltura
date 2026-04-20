@@ -95,6 +95,7 @@ export default function ConversationView({ sessionId, topic, history, onHistoryU
         }
       }
     } catch (err) {
+      console.error('submitTurn error:', err?.name, err?.message, err)
       setMessages(prev => prev.map(m =>
         m.id === agentMsgId
           ? { ...m, isLoading: false, isStreaming: false, isError: true, text: '[Error: could not get response. Please try again.]' }
