@@ -39,10 +39,10 @@ export default function StartView({ onSessionStarted }) {
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="w-full max-w-lg">
           <div className="text-center mb-12">
-            <h1 className="font-fraunces text-6xl font-bold text-amber-100 mb-3 leading-tight">Soltura</h1>
-            <p className="text-gray-400 text-lg font-mono">Your Spanish conversation partner</p>
+            <h1 className="font-fraunces text-6xl font-bold text-amber-800 dark:text-amber-100 mb-3 leading-tight">Soltura</h1>
+            <p className="text-gray-500 dark:text-gray-400 text-lg font-mono">Your Spanish conversation partner</p>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 shadow-2xl">
             <LoadingBubble />
           </div>
         </div>
@@ -54,12 +54,12 @@ export default function StartView({ onSessionStarted }) {
     <div className="flex-1 flex items-center justify-center px-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-12">
-          <h1 className="font-fraunces text-6xl font-bold text-amber-100 mb-3 leading-tight">Soltura</h1>
-          <p className="text-gray-400 text-lg font-mono">Your Spanish conversation partner</p>
+          <h1 className="font-fraunces text-6xl font-bold text-amber-800 dark:text-amber-100 mb-3 leading-tight">Soltura</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-lg font-mono">Your Spanish conversation partner</p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
-          <label className="block text-sm font-mono text-gray-400 mb-3 uppercase tracking-wider">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 shadow-2xl">
+          <label className="block text-sm font-mono text-gray-600 dark:text-gray-400 mb-3 uppercase tracking-wider">
             What would you like to talk about?
           </label>
           <input
@@ -69,10 +69,10 @@ export default function StartView({ onSessionStarted }) {
             onChange={e => setTopic(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') startSession() }}
             placeholder="e.g. My weekend plans, favourite films, cooking..."
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-100 font-mono text-sm placeholder-gray-600 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-colors mb-5"
+            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-3 text-gray-900 dark:text-gray-100 font-mono text-sm placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-colors mb-5"
           />
           {error && (
-            <p className="text-red-400 font-mono text-sm mb-4 text-center">{error}</p>
+            <p className="text-red-600 dark:text-red-400 font-mono text-sm mb-4 text-center">{error}</p>
           )}
           <button
             onClick={startSession}
@@ -85,7 +85,7 @@ export default function StartView({ onSessionStarted }) {
           </button>
         </div>
 
-        <p className="text-center text-gray-600 text-xs font-mono mt-6">
+        <p className="text-center text-gray-400 dark:text-gray-600 text-xs font-mono mt-6">
           Press Enter to start · Cmd+Enter to send messages
         </p>
       </div>
