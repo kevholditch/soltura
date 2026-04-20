@@ -17,10 +17,10 @@ export default function App() {
     localStorage.setItem('theme', theme)
   }, [theme])
 
-  function handleSessionStarted(id, seedContent, sessionTopic) {
-    setSessionId(id)
-    setTopic(sessionTopic)
-    setHistory([{ role: 'assistant', content: seedContent }])
+  function handleTopicSelected(selectedTopic) {
+    setTopic(selectedTopic)
+    setSessionId(null)
+    setHistory([])
     setView('conversation')
   }
 
@@ -48,7 +48,7 @@ export default function App() {
       </nav>
 
       {view === 'start' && (
-        <StartView onSessionStarted={handleSessionStarted} />
+        <StartView onTopicSelected={handleTopicSelected} />
       )}
       {view === 'conversation' && (
         <ConversationView
@@ -56,6 +56,7 @@ export default function App() {
           topic={topic}
           history={history}
           onHistoryUpdate={setHistory}
+          onSessionCreated={setSessionId}
           onEnd={() => setView('summary')}
         />
       )}

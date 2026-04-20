@@ -1,6 +1,5 @@
 import { marked } from 'marked'
 import LoadingBubble from './LoadingBubble.jsx'
-import CorrectionsPanel from './CorrectionsPanel.jsx'
 
 export default function Message({ role, text, corrections = [], isLoading = false, isStreaming = false, isError = false }) {
   if (role === 'user') {
@@ -21,7 +20,6 @@ export default function Message({ role, text, corrections = [], isLoading = fals
           dangerouslySetInnerHTML={{ __html: marked.parse(text || '') }}
         />
       )}
-      <CorrectionsPanel corrections={corrections} />
     </div>
   )
 }

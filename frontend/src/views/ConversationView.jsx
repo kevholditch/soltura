@@ -2,20 +2,22 @@ import { useState, useRef, useEffect } from 'react'
 import { MessageSquare, BookOpen } from 'lucide-react'
 import Message from '../components/Message.jsx'
 
-export default function ConversationView({ sessionId, topic, history, onHistoryUpdate, onEnd }) {
+export default function ConversationView({ sessionId, topic, history, onHistoryUpdate, onSessionCreated, onEnd }) {
   const [messages, setMessages] = useState(() =>
-    history.map((h, i) => ({
-      id: String(i),
-      role: h.role,
-      text: h.content,
-      corrections: [],
-      isLoading: false,
-      isStreaming: false,
-      isError: false,
-    }))
+    history.length > 0
+      ? history.map((h, i) => ({
+          id: String(i),
+          role: h.role,
+          text: h.content,
+          corrections: [],
+          isLoading: false,
+          isStreaming: false,
+          isError: false,
+        }))
+      : [{ id: 'seed-loading', role: 'assistant', text: '', corrections: [], isLoading: true, isStreaming: false, isError: false }]
   )
   const [inputText, setInputText] = useState('')
-  const [submitDisabled, setSubmitDisabled] = useState(false)
+  const [submitDisabled, setSubmitDisabled] = useState(!sessionId)
   const [ending, setEnding] = useState(false)
   const [activeTab, setActiveTab] = useState('chat')
   const [unreadCount, setUnreadCount] = useState(0)
@@ -26,6 +28,30 @@ export default function ConversationView({ sessionId, topic, history, onHistoryU
   useEffect(() => {
     activeTabRef.current = activeTab
   }, [activeTab])
+
+  useEffect(() => {
+    if (sessionId) return
+    let cancelled = false
+    fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic }),
+    })
+      .then(r => { if (!r.ok) throw new Error(`Server error: ${r.status}`); return r.json() })
+      .then(data => {
+        if (cancelled) return
+        onSessionCreated(data.session_id)
+        const seedMsg = { id: 'seed-loading', role: 'assistant', text: data.seed_content, corrections: [], isLoading: false, isStreaming: false, isError: false }
+        setMessages([seedMsg])
+        onHistoryUpdate([{ role: 'assistant', content: data.seed_content }])
+        setSubmitDisabled(false)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setMessages([{ id: 'seed-loading', role: 'assistant', text: '[Error starting session. Please refresh.]', corrections: [], isLoading: false, isStreaming: false, isError: true }])
+      })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (threadRef.current) {
