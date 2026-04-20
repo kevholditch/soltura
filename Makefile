@@ -1,13 +1,42 @@
 OLLAMA_MODEL := gemma3:12b
+BACKEND      := $(filter anthropic,$(MAKECMDGOALS))
 
-# Capture the backend name when passed as a second word, e.g. "make run gemma"
-BACKEND := $(filter anthropic gemma,$(MAKECMDGOALS))
+.PHONY: install-model run anthropic build dev build-frontend
 
-.PHONY: install-model run anthropic gemma build
-
-# No-op targets so Make doesn't error when "anthropic" or "gemma" appear on the command line
-anthropic gemma:
+# No-op target so Make doesn't error when "anthropic" appears on the command line
+anthropic:
 	@:
+
+frontend/node_modules:
+	cd frontend && npm install
+
+## build-frontend: compile React source into web/
+build-frontend: frontend/node_modules
+	cd frontend && npm run build
+
+## build: compile React + Go binary
+build: build-frontend
+	go build -o soltura .
+
+## run [anthropic]: build frontend then start Go server (default: local Gemma)
+##   make run             — use local Gemma model
+##   make run anthropic   — use Anthropic API (requires ANTHROPIC_API_KEY)
+run: build-frontend
+	@if [ "$(BACKEND)" = "anthropic" ]; then \
+		go run .; \
+	else \
+		LLM_BACKEND=ollama go run .; \
+	fi
+
+## dev [anthropic]: Vite hot-reload on :5173 + Go on :8080 (default: local Gemma)
+##   make dev             — use local Gemma model
+##   make dev anthropic   — use Anthropic API (requires ANTHROPIC_API_KEY)
+dev: frontend/node_modules
+	@if [ "$(BACKEND)" = "anthropic" ]; then \
+		(trap 'kill %1 2>/dev/null' EXIT; (cd frontend && npm run dev) & go run .); \
+	else \
+		(trap 'kill %1 2>/dev/null' EXIT; (cd frontend && npm run dev) & LLM_BACKEND=ollama go run .); \
+	fi
 
 ## install-model: install Ollama (via Homebrew) if absent, start server, then pull the model
 install-model:
@@ -22,21 +51,4 @@ install-model:
 	}
 	@echo "Pulling $(OLLAMA_MODEL) (this may take a while on first run)..."
 	ollama pull $(OLLAMA_MODEL)
-	@echo "Done. Run: make run gemma"
-
-## run [anthropic|gemma]: start the app with the chosen backend
-##   make run anthropic   — use the Anthropic API (requires ANTHROPIC_API_KEY)
-##   make run gemma       — use the local Ollama model
-run:
-	@if [ "$(BACKEND)" = "gemma" ]; then \
-		LLM_BACKEND=ollama go run .; \
-	elif [ "$(BACKEND)" = "anthropic" ]; then \
-		go run .; \
-	else \
-		echo "Usage: make run anthropic  OR  make run gemma"; \
-		exit 1; \
-	fi
-
-## build: compile the binary
-build:
-	go build -o soltura .
+	@echo "Done. Run: make dev"
