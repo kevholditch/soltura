@@ -176,6 +176,19 @@ func (d *DrillHandler) Turn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If mastered, stream a transitional celebration message before the result event
+	if mastered {
+		writeSSE(w, flusher, `{"type":"transition_start"}`)
+		transSystem := prompts.DrillTransition(body.PatternName)
+		_, transErr := d.client.StreamCompletion(ctx, transSystem, []llm.Message{{Role: "user", Content: "next"}}, func(chunk string) {
+			data, _ := json.Marshal(map[string]string{"type": "transition_chunk", "text": chunk})
+			writeSSE(w, flusher, string(data))
+		})
+		if transErr != nil {
+			log.Printf("drill transition stream error: %v", transErr)
+		}
+	}
+
 	resultData, _ := json.Marshal(map[string]interface{}{
 		"type":          "drill_result",
 		"correct":       correct,

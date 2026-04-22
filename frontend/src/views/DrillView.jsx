@@ -9,6 +9,8 @@ export default function DrillView({ onExit }) {
   const [vocabIds, setVocabIds] = useState([])
   const [answer, setAnswer] = useState('')
   const [feedbackText, setFeedbackText] = useState('')
+  const [transitionText, setTransitionText] = useState('')
+  const [showTransition, setShowTransition] = useState(false)
   const [drillHistory, setDrillHistory] = useState([])
   const [patternCount, setPatternCount] = useState(0)
   const inputRef = useRef(null)
@@ -23,6 +25,8 @@ export default function DrillView({ onExit }) {
 
   async function loadNextPattern() {
     setPhase('loading')
+    setTransitionText('')
+    setShowTransition(false)
     try {
       const res = await fetch('/api/drills/start', { method: 'POST' })
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
@@ -53,6 +57,8 @@ export default function DrillView({ onExit }) {
     const trimmed = answer.trim()
     if (!trimmed) return
     setFeedbackText('')
+    setTransitionText('')
+    setShowTransition(false)
     setPhase('feedback')
 
     const updatedHistory = [...drillHistory, { role: 'user', content: trimmed }]
@@ -76,6 +82,7 @@ export default function DrillView({ onExit }) {
       const decoder = new TextDecoder()
       let buffer = ''
       let fullFeedback = ''
+      let fullTransition = ''
       let drillResult = null
 
       while (true) {
@@ -95,6 +102,11 @@ export default function DrillView({ onExit }) {
             if (event.type === 'chunk') {
               fullFeedback += event.text
               setFeedbackText(fullFeedback)
+            } else if (event.type === 'transition_start') {
+              setShowTransition(true)
+            } else if (event.type === 'transition_chunk') {
+              fullTransition += event.text
+              setTransitionText(fullTransition)
             } else if (event.type === 'drill_result') {
               drillResult = event
             }
@@ -110,8 +122,8 @@ export default function DrillView({ onExit }) {
 
         if (drillResult.mastered) {
           setDrillHistory(newHistory)
-          setPhase('mastered')
-          setTimeout(() => loadNextPattern(), 2000)
+          // Stay in feedback phase so user sees feedback + transition, then load next
+          setTimeout(() => loadNextPattern(), 2500)
         } else {
           const nextQ = drillResult.next_question
           if (nextQ) {
@@ -131,7 +143,7 @@ export default function DrillView({ onExit }) {
   return (
     <div className="flex-1 flex flex-col max-w-2xl w-full mx-auto px-4 py-6" style={{ height: 'calc(100vh - 3.5rem)' }}>
 
-      {phase !== 'loading' && (
+      {phase !== 'loading' && phase !== 'all_done' && (
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <button
             onClick={onExit}
@@ -168,9 +180,24 @@ export default function DrillView({ onExit }) {
             </div>
 
             {phase === 'feedback' && (
-              <div className="agent-bubble">
-                {feedbackText ? feedbackText : <LoadingBubble />}
-              </div>
+              <>
+                <div className="agent-bubble">
+                  {feedbackText ? feedbackText : <LoadingBubble />}
+                </div>
+
+                {showTransition && (
+                  <>
+                    <div className="flex items-center gap-3 py-1">
+                      <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                      <span className="text-xs font-mono text-green-600 dark:text-green-400 uppercase tracking-wider">✓ Dominado</span>
+                      <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                    </div>
+                    <div className="agent-bubble border-green-200 dark:border-green-900">
+                      {transitionText ? transitionText : <LoadingBubble />}
+                    </div>
+                  </>
+                )}
+              </>
             )}
           </div>
 
@@ -199,15 +226,6 @@ export default function DrillView({ onExit }) {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {phase === 'mastered' && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-          <div className="text-4xl mb-4 text-green-500">✓</div>
-          <p className="font-fraunces text-2xl text-amber-700 dark:text-amber-300 mb-2">Pattern mastered!</p>
-          <p className="font-mono text-sm text-gray-500 dark:text-gray-400">{patternName}</p>
-          <p className="font-mono text-xs text-gray-400 dark:text-gray-600 mt-4">Loading next pattern…</p>
         </div>
       )}
 

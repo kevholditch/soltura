@@ -177,6 +177,22 @@ Do not ask a new question. Do not use English.`))
 	return buf.String()
 }
 
+// DrillTransition returns a system prompt for a short celebratory Spanish transition message.
+func DrillTransition(patternName string) string {
+	tmpl := template.Must(template.New("drilltransition").Parse(`You are a warm Spanish language drill coach. The learner has just mastered the pattern: "{{.PatternName}}".
+
+Write 1-2 sentences in Spanish celebrating this achievement and announcing they are moving on to the next pattern. Vary your phrasing — use a different opener each time. Be genuinely enthusiastic but brief. Do not use English.`))
+
+	var buf strings.Builder
+	err := tmpl.Execute(&buf, struct {
+		PatternName string
+	}{PatternName: patternName})
+	if err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
 // SessionSummary returns a prompt for summarizing a learning session.
 func SessionSummary(topic, duration string, turnCount int, correctionsJSON string) string {
 	tmpl := template.Must(template.New("summary").Parse(`You are summarising a Spanish learning session. Here is the data:
