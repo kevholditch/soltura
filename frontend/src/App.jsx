@@ -4,6 +4,7 @@ import StartView from './views/StartView.jsx'
 import ConversationView from './views/ConversationView.jsx'
 import SummaryView from './views/SummaryView.jsx'
 import VocabView from './views/VocabView.jsx'
+import DrillView from './views/DrillView.jsx'
 
 export default function App() {
   const [view, setView] = useState('start')
@@ -22,6 +23,10 @@ export default function App() {
     setSessionId(null)
     setHistory([])
     setView('conversation')
+  }
+
+  function handleDrillsStart() {
+    setView('drills')
   }
 
   return (
@@ -48,7 +53,7 @@ export default function App() {
       </nav>
 
       {view === 'start' && (
-        <StartView onTopicSelected={handleTopicSelected} />
+        <StartView onTopicSelected={handleTopicSelected} onDrillsStart={handleDrillsStart} />
       )}
       {view === 'conversation' && (
         <ConversationView
@@ -73,6 +78,9 @@ export default function App() {
       )}
       {view === 'vocab' && (
         <VocabView onBack={() => setView(sessionId ? 'conversation' : 'start')} />
+      )}
+      {view === 'drills' && (
+        <DrillView onExit={() => setView('start')} />
       )}
     </div>
   )

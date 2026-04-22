@@ -25,6 +25,9 @@ type Store interface {
 	UpsertVocab(corrections []models.Correction) error
 	GetVocab(limit int) ([]models.VocabEntry, error)
 	GetVocabCount() (int, error)
+
+	GetUnlearntVocab(limit int) ([]models.VocabEntry, error)
+	MarkVocabLearnt(ids []string) error
 }
 
 const schema = `
@@ -88,6 +91,21 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run schema: %w", err)
+	}
+
+	// Migrate: add learnt columns to vocab if missing
+	var colCount int
+	row := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('vocab') WHERE name='learnt'`)
+	row.Scan(&colCount) //nolint:errcheck
+	if colCount == 0 {
+		if _, err := db.Exec(`ALTER TABLE vocab ADD COLUMN learnt INTEGER NOT NULL DEFAULT 0`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate vocab learnt: %w", err)
+		}
+		if _, err := db.Exec(`ALTER TABLE vocab ADD COLUMN learnt_at DATETIME`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate vocab learnt_at: %w", err)
+		}
 	}
 
 	return &SQLiteStore{db: db}, nil
@@ -353,4 +371,46 @@ func (s *SQLiteStore) GetVocabCount() (int, error) {
 		return 0, fmt.Errorf("count vocab: %w", err)
 	}
 	return count, nil
+}
+
+// GetUnlearntVocab returns unlearnt vocab ordered by seen_count DESC.
+func (s *SQLiteStore) GetUnlearntVocab(limit int) ([]models.VocabEntry, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(
+		`SELECT id, original, corrected, explanation, category, seen_count, last_seen FROM vocab WHERE learnt = 0 ORDER BY seen_count DESC, last_seen DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query unlearnt vocab: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []models.VocabEntry
+	for rows.Next() {
+		var e models.VocabEntry
+		var lastSeenStr string
+		if err := rows.Scan(&e.ID, &e.Original, &e.Corrected, &e.Explanation, &e.Category, &e.SeenCount, &lastSeenStr); err != nil {
+			return nil, fmt.Errorf("scan unlearnt vocab: %w", err)
+		}
+		ls, err := time.Parse(time.RFC3339, lastSeenStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse last_seen: %w", err)
+		}
+		e.LastSeen = ls
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// MarkVocabLearnt sets learnt=1 and learnt_at=now for the given IDs.
+func (s *SQLiteStore) MarkVocabLearnt(ids []string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, id := range ids {
+		if _, err := s.db.Exec(`UPDATE vocab SET learnt = 1, learnt_at = ? WHERE id = ?`, now, id); err != nil {
+			return fmt.Errorf("mark vocab learnt %s: %w", id, err)
+		}
+	}
+	return nil
 }

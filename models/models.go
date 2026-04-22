@@ -29,11 +29,13 @@ type Correction struct {
 }
 
 type VocabEntry struct {
-	ID          string    `json:"id"`
-	Original    string    `json:"original"`
-	Corrected   string    `json:"corrected"`
-	Explanation string    `json:"explanation"`
-	Category    string    `json:"category"`
-	SeenCount   int       `json:"seen_count"`
-	LastSeen    time.Time `json:"last_seen"`
+	ID          string     `json:"id"`
+	Original    string     `json:"original"`
+	Corrected   string     `json:"corrected"`
+	Explanation string     `json:"explanation"`
+	Category    string     `json:"category"`
+	SeenCount   int        `json:"seen_count"`
+	LastSeen    time.Time  `json:"last_seen"`
+	Learnt      bool       `json:"learnt"`
+	LearntAt    *time.Time `json:"learnt_at,omitempty"`
 }

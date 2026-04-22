@@ -98,6 +98,7 @@ func main() {
 	sessionHandler := handlers.NewSessionHandler(sqliteStore, client)
 	summaryHandler := handlers.NewSummaryHandler(sqliteStore, client)
 	vocabHandler := handlers.NewVocabHandler(sqliteStore)
+	drillHandler := handlers.NewDrillHandler(sqliteStore, client)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -108,6 +109,8 @@ func main() {
 	r.Post("/api/sessions/{sessionID}/end", sessionHandler.End)
 	r.Get("/api/sessions/{sessionID}/summary", summaryHandler.Get)
 	r.Get("/api/vocab", vocabHandler.List)
+	r.Post("/api/drills/start", drillHandler.Start)
+	r.Post("/api/drills/turn", drillHandler.Turn)
 
 	r.Handle("/*", http.FileServer(http.Dir("./web")))
 
