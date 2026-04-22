@@ -13,11 +13,27 @@ export default function DrillView({ onExit }) {
   const [showTransition, setShowTransition] = useState(false)
   const [drillHistory, setDrillHistory] = useState([])
   const [patternCount, setPatternCount] = useState(0)
+  const [phrases, setPhrases] = useState([])
+  const [phraseIndex, setPhraseIndex] = useState(0)
   const inputRef = useRef(null)
 
+  // Fetch phrases and kick off first drill in parallel
   useEffect(() => {
+    fetch('/api/drills/phrases')
+      .then(r => r.json())
+      .then(data => setPhrases(data))
+      .catch(() => {})
     loadNextPattern()
   }, [])
+
+  // Cycle phrases every 2.5s while loading
+  useEffect(() => {
+    if (phase !== 'loading' || phrases.length === 0) return
+    const id = setInterval(() => {
+      setPhraseIndex(i => (i + 1) % phrases.length)
+    }, 2500)
+    return () => clearInterval(id)
+  }, [phase, phrases])
 
   useEffect(() => {
     if (phase === 'question') inputRef.current?.focus()
@@ -25,6 +41,7 @@ export default function DrillView({ onExit }) {
 
   async function loadNextPattern() {
     setPhase('loading')
+    setPhraseIndex(0)
     setTransitionText('')
     setShowTransition(false)
     try {
@@ -122,7 +139,6 @@ export default function DrillView({ onExit }) {
 
         if (drillResult.mastered) {
           setDrillHistory(newHistory)
-          // Stay in feedback phase so user sees feedback + transition, then load next
           setTimeout(() => loadNextPattern(), 2500)
         } else {
           const nextQ = drillResult.next_question
@@ -140,10 +156,13 @@ export default function DrillView({ onExit }) {
     }
   }
 
+  const currentPhrase = phrases.length > 0 ? phrases[phraseIndex] : ''
+
   return (
     <div className="flex-1 flex flex-col max-w-2xl w-full mx-auto px-4 py-6" style={{ height: 'calc(100vh - 3.5rem)' }}>
 
-      {phase !== 'loading' && phase !== 'all_done' && (
+      {/* Header — always visible except all_done */}
+      {phase !== 'all_done' && (
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <button
             onClick={onExit}
@@ -151,7 +170,7 @@ export default function DrillView({ onExit }) {
           >
             ← Exit drills
           </button>
-          {patternName && (
+          {phase !== 'loading' && patternName && (
             <span className="text-xs font-mono text-gray-400 dark:text-gray-600 uppercase tracking-wider">
               Pattern {patternCount} · {patternName}
             </span>
@@ -159,15 +178,16 @@ export default function DrillView({ onExit }) {
         </div>
       )}
 
+      {/* Loading */}
       {phase === 'loading' && (
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="agent-bubble w-full max-w-lg">
-            <LoadingBubble />
+        <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
+          <div className="agent-bubble font-mono text-sm text-gray-500 dark:text-gray-400 min-h-[3rem] flex items-center">
+            {currentPhrase || <LoadingBubble />}
           </div>
-          <p className="text-xs font-mono text-gray-500 dark:text-gray-500 mt-3">Analysing your mistakes…</p>
         </div>
       )}
 
+      {/* Question / Feedback */}
       {(phase === 'question' || phase === 'feedback') && (
         <div className="flex-1 flex flex-col overflow-y-auto" style={{ minHeight: 0 }}>
           <div className="space-y-4 pb-4">
@@ -229,6 +249,7 @@ export default function DrillView({ onExit }) {
         </div>
       )}
 
+      {/* All done */}
       {phase === 'all_done' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
           <p className="font-fraunces text-3xl text-amber-700 dark:text-amber-300 mb-4">All done!</p>

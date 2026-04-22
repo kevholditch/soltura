@@ -14,6 +14,24 @@ import (
 	"soltura/store"
 )
 
+var loadingPhrases = []string{
+	"Warming up the conjugation engine…",
+	"Consulting the Real Academia Española…",
+	"Herding rogue accent marks…",
+	"Calibrating your ser/estar detector…",
+	"Untangling your prepositions…",
+	"Reviewing the evidence against your grammar…",
+	"Sharpening the correction pencil…",
+	"Waking up the drill sergeant…",
+	"Building your personalised obstacle course…",
+	"Convincing the subjunctive to cooperate…",
+	"Sorting mistakes by severity (spoiler: all fixable)…",
+	"Polishing your irregular verbs…",
+	"Checking under every tilde…",
+	"Negotiating with your gender agreements…",
+	"Loading the catapult with practice questions…",
+}
+
 type DrillHandler struct {
 	store  store.Store
 	client llm.Completer
@@ -21,6 +39,12 @@ type DrillHandler struct {
 
 func NewDrillHandler(s store.Store, c llm.Completer) *DrillHandler {
 	return &DrillHandler{store: s, client: c}
+}
+
+// Phrases handles GET /api/drills/phrases
+func (d *DrillHandler) Phrases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(loadingPhrases)
 }
 
 // Start handles POST /api/drills/start

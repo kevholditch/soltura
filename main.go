@@ -109,6 +109,7 @@ func main() {
 	r.Post("/api/sessions/{sessionID}/end", sessionHandler.End)
 	r.Get("/api/sessions/{sessionID}/summary", summaryHandler.Get)
 	r.Get("/api/vocab", vocabHandler.List)
+	r.Get("/api/drills/phrases", drillHandler.Phrases)
 	r.Post("/api/drills/start", drillHandler.Start)
 	r.Post("/api/drills/turn", drillHandler.Turn)
 
