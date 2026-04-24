@@ -8,9 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	
-	"soltura/prompts"
 	"soltura/llm"
+	"soltura/prompts"
 	"soltura/store"
 )
 
@@ -18,6 +17,8 @@ type SummaryHandler struct {
 	store  store.Store
 	client llm.Completer
 }
+
+const summaryMaxTokens = 260
 
 func NewSummaryHandler(s store.Store, c llm.Completer) *SummaryHandler {
 	return &SummaryHandler{store: s, client: c}
@@ -72,7 +73,10 @@ func (s *SummaryHandler) Get(w http.ResponseWriter, r *http.Request) {
 	correctionsJSON := string(correctionsBytes)
 
 	summaryPrompt := prompts.SessionSummary(session.Topic, duration, len(turns), correctionsJSON)
-	summary, err := s.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: summaryPrompt}})
+	sumCtx := llm.WithModelProfile(r.Context(), llm.ModelProfileFast)
+	sumCtx = llm.WithMaxTokens(sumCtx, summaryMaxTokens)
+	sumCtx = llm.WithPurpose(sumCtx, llm.PurposeSessionSummary)
+	summary, err := s.client.Complete(sumCtx, "", []llm.Message{{Role: "user", Content: summaryPrompt}})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

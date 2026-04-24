@@ -97,11 +97,12 @@ func (c *Client) post(ctx context.Context, req request) (*http.Response, error) 
 }
 
 func (c *Client) StreamCompletion(ctx context.Context, system string, messages []llm.Message, onChunk func(string)) (string, error) {
+	maxTokens := llm.MaxTokensFromContext(ctx, 4096)
 	resp, err := c.post(ctx, request{
 		Model:     c.model,
 		Messages:  buildMessages(system, messages),
 		Stream:    true,
-		MaxTokens: 4096,
+		MaxTokens: maxTokens,
 	})
 	if err != nil {
 		return "", err
@@ -143,11 +144,12 @@ func (c *Client) StreamCompletion(ctx context.Context, system string, messages [
 }
 
 func (c *Client) Complete(ctx context.Context, system string, messages []llm.Message) (string, error) {
+	maxTokens := llm.MaxTokensFromContext(ctx, 1000)
 	resp, err := c.post(ctx, request{
 		Model:     c.model,
 		Messages:  buildMessages(system, messages),
 		Stream:    false,
-		MaxTokens: 1000,
+		MaxTokens: maxTokens,
 	})
 	if err != nil {
 		return "", err

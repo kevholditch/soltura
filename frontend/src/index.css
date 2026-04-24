@@ -38,6 +38,13 @@ table,
   justify-content: flex-end;
 }
 
+.user-bubble-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 90%;
+}
+
 .agent-message {
   display: flex;
   flex-direction: column;
@@ -63,6 +70,78 @@ table,
   background-color: #2a1a0e;
   border-color: #7c2d12;
   color: #fed7aa;
+}
+
+.user-bubble-submitted {
+  border-color: #fdba74;
+  background-color: #fff5eb;
+}
+
+.user-bubble-correct {
+  border-color: #86efac;
+  background-color: #f0fdf4;
+  color: #166534;
+}
+
+.user-bubble-wrong {
+  border-color: #fca5a5;
+  background-color: #fef2f2;
+  color: #991b1b;
+}
+
+.dark .user-bubble-submitted {
+  border-color: #9a3412;
+  background-color: #34190f;
+}
+
+.dark .user-bubble-correct {
+  border-color: #166534;
+  background-color: #052e16;
+  color: #86efac;
+}
+
+.dark .user-bubble-wrong {
+  border-color: #7f1d1d;
+  background-color: #450a0a;
+  color: #fca5a5;
+}
+
+.user-bubble-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  border: 1px solid;
+  animation: drill-status-pop 280ms ease-out both;
+}
+
+.user-bubble-mark-correct {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.user-bubble-mark-wrong {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.dark .user-bubble-mark-correct {
+  color: #86efac;
+  background: #052e16;
+  border-color: #166534;
+}
+
+.dark .user-bubble-mark-wrong {
+  color: #fca5a5;
+  background: #450a0a;
+  border-color: #7f1d1d;
 }
 
 .agent-bubble {
@@ -157,6 +236,235 @@ table,
 
 .streaming { animation: pulse-border-light 1.4s ease-in-out infinite; }
 .dark .streaming { animation: pulse-border 1.4s ease-in-out infinite; }
+
+/* ── Drill question inputs ────────────────────────────── */
+
+.drill-question-bubble-active {
+  border-color: #f59e0b;
+}
+
+.drill-question-bubble-submitted {
+  border-color: #fdba74;
+  background-color: #fffbeb;
+}
+
+.drill-question-bubble-correct {
+  border-color: #86efac !important;
+  background-color: #f0fdf4;
+}
+
+.drill-question-bubble-wrong {
+  border-color: #fca5a5 !important;
+  background-color: #fef2f2;
+}
+
+.dark .drill-question-bubble-submitted {
+  border-color: #9a3412;
+  background-color: #1f1308;
+}
+
+.dark .drill-question-bubble-correct {
+  border-color: #166534 !important;
+  background-color: #052e16;
+}
+
+.dark .drill-question-bubble-wrong {
+  border-color: #7f1d1d !important;
+  background-color: #450a0a;
+}
+
+.drill-question-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drill-question-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  border: 1px solid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  animation: drill-status-pop 220ms ease-out both;
+}
+
+.drill-question-mark-correct {
+  color: #166534;
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.drill-question-mark-wrong {
+  color: #991b1b;
+  border-color: #fca5a5;
+  background: #fee2e2;
+}
+
+.dark .drill-question-mark-correct {
+  color: #86efac;
+  border-color: #166534;
+  background: #052e16;
+}
+
+.dark .drill-question-mark-wrong {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+  background: #450a0a;
+}
+
+.drill-inline-question {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.drill-inline-input {
+  min-width: 92px;
+  max-width: 220px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #f59e0b;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.drill-inline-input:focus {
+  outline: none;
+  border-color: #c2410c;
+  box-shadow: 0 0 0 2px #c1440e22;
+}
+
+.drill-inline-input-submitted {
+  border-color: #fdba74;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.drill-inline-input-full {
+  margin-top: 10px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.dark .drill-inline-input {
+  border-color: #9a3412;
+  background: #2a1a0e;
+  color: #fed7aa;
+}
+
+.dark .drill-inline-input-submitted {
+  border-color: #9a3412;
+  background: #34190f;
+  color: #fdba74;
+}
+
+.drill-question-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dark .drill-question-controls {
+  border-top-color: #1f2937;
+}
+
+.drill-question-hint {
+  font-size: 0.7rem;
+  color: #6b7280;
+}
+
+.drill-submit-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #c2410c;
+  background: #c1440e;
+  color: #fff;
+  transition: 140ms ease;
+}
+
+.drill-submit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.drill-submit-btn:not(:disabled):hover {
+  background: #a33a0c;
+}
+
+/* ── Drill status ─────────────────────────────────────── */
+
+@keyframes drill-status-pop {
+  0% { opacity: 0; transform: translateY(4px) scale(0.97); }
+  60% { opacity: 1; transform: translateY(0) scale(1.04); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes drill-status-glow-correct {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.16); }
+}
+
+@keyframes drill-status-glow-wrong {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.14); }
+}
+
+.drill-status-pill {
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid;
+  animation: drill-status-pop 280ms ease-out both;
+}
+
+.drill-status-pill-correct {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #86efac;
+  animation:
+    drill-status-pop 280ms ease-out both,
+    drill-status-glow-correct 900ms ease-out 1;
+}
+
+.drill-status-pill-wrong {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fca5a5;
+  animation:
+    drill-status-pop 280ms ease-out both,
+    drill-status-glow-wrong 900ms ease-out 1;
+}
+
+.dark .drill-status-pill-correct {
+  color: #86efac;
+  background: #052e16;
+  border-color: #166534;
+}
+
+.dark .drill-status-pill-wrong {
+  color: #fca5a5;
+  background: #450a0a;
+  border-color: #7f1d1d;
+}
 
 /* ── Corrections panel ─────────────────────────────────── */
 

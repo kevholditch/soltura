@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { marked } from 'marked'
 
-export default function SummaryView({ sessionId, onNewSession }) {
+export default function SummaryView({ sessionId }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -41,15 +41,6 @@ export default function SummaryView({ sessionId, onNewSession }) {
           />
         </div>
 
-        <button
-          onClick={onNewSession}
-          className="w-full font-mono text-sm py-3 px-6 rounded-lg text-white font-semibold uppercase tracking-wider transition-colors"
-          style={{ backgroundColor: '#C1440E' }}
-          onMouseOver={e => { e.currentTarget.style.backgroundColor = '#a33a0c' }}
-          onMouseOut={e => { e.currentTarget.style.backgroundColor = '#C1440E' }}
-        >
-          Start New Session
-        </button>
       </div>
     </div>
   )

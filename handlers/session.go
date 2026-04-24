@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	
 	"soltura/llm"
 	"soltura/models"
 	"soltura/prompts"
@@ -23,6 +21,11 @@ type SessionHandler struct {
 	store  store.Store
 	client llm.Completer
 }
+
+const (
+	sessionSeedMaxTokens       = 80
+	sessionCorrectionMaxTokens = 1000
+)
 
 func NewSessionHandler(s store.Store, c llm.Completer) *SessionHandler {
 	return &SessionHandler{store: s, client: c}
@@ -54,7 +57,10 @@ func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prompt := "Ask a single short, natural opening question in Spanish to start a conversation about: " + body.Topic + ". One sentence only. No preamble, no introduction, no explanation."
-	seedContent, err := s.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: prompt}})
+	seedCtx := llm.WithModelProfile(r.Context(), llm.ModelProfileFast)
+	seedCtx = llm.WithMaxTokens(seedCtx, sessionSeedMaxTokens)
+	seedCtx = llm.WithPurpose(seedCtx, llm.PurposeSessionSeed)
+	seedContent, err := s.client.Complete(seedCtx, "", []llm.Message{{Role: "user", Content: prompt}})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -74,7 +80,7 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
 
 	var body struct {
-		UserText string              `json:"user_text"`
+		UserText string        `json:"user_text"`
 		History  []llm.Message `json:"history"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -128,7 +134,9 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 		defer wg.Done()
 		system := prompts.ConversationSystem(session.Topic)
 		var streamErr error
-		fullReply, streamErr = s.client.StreamCompletion(ctx, system, msgs, func(chunk string) {
+		convCtx := llm.WithModelProfile(ctx, llm.ModelProfileStrong)
+		convCtx = llm.WithPurpose(convCtx, llm.PurposeConversationStream)
+		fullReply, streamErr = s.client.StreamCompletion(convCtx, system, msgs, func(chunk string) {
 			data, _ := json.Marshal(map[string]string{"type": "chunk", "text": chunk})
 			writeSSE(w, flusher, string(data))
 		})
@@ -142,40 +150,22 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 		defer wg.Done()
 		corrPrompt := prompts.CorrectionAnalysis(userText)
 		corrMsgs := []llm.Message{{Role: "user", Content: corrPrompt}}
-		result, err := s.client.Complete(ctx, "", corrMsgs)
+		corrCtx := llm.WithModelProfile(ctx, llm.ModelProfileFast)
+		corrCtx = llm.WithMaxTokens(corrCtx, sessionCorrectionMaxTokens)
+		corrCtx = llm.WithPurpose(corrCtx, llm.PurposeCorrectionAnalysis)
+		result, err := s.client.Complete(corrCtx, "", corrMsgs)
 		if err != nil {
 			corrErr = err
 			log.Printf("correction error: %v", err)
 			return
 		}
 
-		// Strip markdown code fences if present
-		cleaned := strings.TrimSpace(result)
-		if strings.HasPrefix(cleaned, "```") {
-			lines := strings.Split(cleaned, "\n")
-			if len(lines) > 2 {
-				cleaned = strings.Join(lines[1:len(lines)-1], "\n")
-			}
-		}
-
-		var rawCorrections []struct {
-			Original    string `json:"original"`
-			Corrected   string `json:"corrected"`
-			Explanation string `json:"explanation"`
-			Category    string `json:"category"`
-		}
-		if err := json.Unmarshal([]byte(cleaned), &rawCorrections); err != nil {
+		parsedCorrections, err := parseCorrectionsPayload(result)
+		if err != nil {
 			log.Printf("parse corrections error: %v, raw: %s", err, result)
 			return
 		}
-		for _, rc := range rawCorrections {
-			corrections = append(corrections, models.Correction{
-				Original:    rc.Original,
-				Corrected:   rc.Corrected,
-				Explanation: rc.Explanation,
-				Category:    rc.Category,
-			})
-		}
+		corrections = parsedCorrections
 	}()
 
 	wg.Wait()

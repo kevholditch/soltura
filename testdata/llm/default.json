@@ -1,0 +1,65 @@
+{
+  "purposes": {
+    "session_seed": {
+      "complete_text": "¿Qué planes tienes para este fin de semana?"
+    },
+    "conversation_stream": {
+      "stream_chunks": [
+        "Suena genial. ",
+        "También me encanta ir al skatepark. ",
+        "¿Con quién vas a pasar el día?"
+      ]
+    },
+    "correction_analysis": {
+      "complete_text": "[{\"original\":\"voy a ir a el skatepark\",\"corrected\":\"voy a ir al skatepark\",\"explanation\":\"Use the contraction 'al' instead of 'a el'.\",\"category\":\"grammar\"}]"
+    },
+    "session_summary": {
+      "complete_text": "## What went well\\nYou kept the conversation flowing naturally and used future tense confidently.\\n\\n## Key corrections\\n- Grammar: *voy a ir a el skatepark* -> *voy a ir al skatepark*\\n\\n## Words to review\\n- voy a ir al skatepark\\n\\n## One focus for next time\\nFocus on contractions like **al** and **del**."
+    },
+    "drill_start": {
+      "complete_text": "{\"pattern_name\":\"a el -> al\",\"explanation\":\"Cuando usas 'a' + 'el', debes contraerlo a 'al'.\",\"question\":\"Completa: Voy ___ skatepark.\",\"vocab_ids\":[\"{{FIRST_VOCAB_ID}}\"]}"
+    },
+    "drill_mark": {
+      "sequence": [
+        {
+          "complete_text": "{\"correct\": false}"
+        },
+        {
+          "complete_text": "{\"correct\": true}"
+        }
+      ]
+    },
+    "drill_feedback_stream": {
+      "sequence": [
+        {
+          "stream_chunks": [
+            "Casi. ",
+            "Recuerda que 'a el' se convierte en 'al'."
+          ]
+        },
+        {
+          "stream_chunks": [
+            "Muy bien. ",
+            "Usaste la contracción correcta."
+          ]
+        }
+      ]
+    },
+    "drill_evaluate": {
+      "sequence": [
+        {
+          "complete_text": "{\"correct\": false, \"mastered\": false, \"next_question\": \"Inténtalo otra vez: Voy ___ parque.\"}"
+        },
+        {
+          "complete_text": "{\"correct\": true, \"mastered\": true, \"next_question\": \"\"}"
+        }
+      ]
+    },
+    "drill_transition": {
+      "stream_chunks": [
+        "Excelente trabajo. ",
+        "Pasamos al siguiente patrón."
+      ]
+    }
+  }
+}

@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"soltura/llm"
@@ -32,6 +31,16 @@ var loadingPhrases = []string{
 	"Loading the catapult with practice questions…",
 }
 
+const (
+	drillStartVocabLimit  = 30
+	drillHistoryMaxTurns  = 8
+	drillStartMaxTokens   = 320
+	drillMarkMaxTokens    = 40
+	drillFeedbackMaxToken = 180
+	drillEvalMaxTokens    = 220
+	drillTransitionMaxTok = 90
+)
+
 type DrillHandler struct {
 	store  store.Store
 	client llm.Completer
@@ -51,7 +60,7 @@ func (d *DrillHandler) Phrases(w http.ResponseWriter, r *http.Request) {
 func (d *DrillHandler) Start(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	vocab, err := d.store.GetUnlearntVocab(100)
+	vocab, err := d.store.GetUnlearntVocab(drillStartVocabLimit)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -71,7 +80,10 @@ func (d *DrillHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prompt := prompts.DrillStart(string(vocabJSON))
-	result, err := d.client.Complete(r.Context(), "", []llm.Message{{Role: "user", Content: prompt}})
+	startCtx := llm.WithModelProfile(r.Context(), llm.ModelProfileFast)
+	startCtx = llm.WithMaxTokens(startCtx, drillStartMaxTokens)
+	startCtx = llm.WithPurpose(startCtx, llm.PurposeDrillStart)
+	result, err := d.client.Complete(startCtx, "", []llm.Message{{Role: "user", Content: prompt}})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -135,64 +147,92 @@ func (d *DrillHandler) Turn(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 
-	historyJSON, _ := json.Marshal(body.History)
+	history := body.History
+	if len(history) > drillHistoryMaxTurns {
+		history = history[len(history)-drillHistoryMaxTurns:]
+	}
+	historyJSON, _ := json.Marshal(history)
 
-	var mastered bool
 	var correct bool
+	var mastered bool
 	var nextQuestion string
-	var evalErr error
+	// Step 1: quick lightweight correctness mark
+	markPrompt := prompts.DrillMark(body.PatternName, body.Question, body.Answer)
+	markCtx := llm.WithModelProfile(ctx, llm.ModelProfileFast)
+	markCtx = llm.WithMaxTokens(markCtx, drillMarkMaxTokens)
+	markCtx = llm.WithPurpose(markCtx, llm.PurposeDrillMark)
+	markResult, err := d.client.Complete(markCtx, "", []llm.Message{{Role: "user", Content: markPrompt}})
+	if err != nil {
+		log.Printf("drill mark error: %v", err)
+	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Goroutine A: stream feedback
-	go func() {
-		defer wg.Done()
-		system := prompts.DrillFeedback(body.PatternName, body.Question, body.Answer)
-		_, streamErr := d.client.StreamCompletion(ctx, system, []llm.Message{{Role: "user", Content: body.Answer}}, func(chunk string) {
-			data, _ := json.Marshal(map[string]string{"type": "chunk", "text": chunk})
-			writeSSE(w, flusher, string(data))
-		})
-		if streamErr != nil {
-			log.Printf("drill feedback stream error: %v", streamErr)
-		}
-	}()
-
-	// Goroutine B: evaluate mastery
-	go func() {
-		defer wg.Done()
-		evalPrompt := prompts.DrillEvaluate(body.PatternName, body.Explanation, body.Question, body.Answer, string(historyJSON))
-		result, err := d.client.Complete(ctx, "", []llm.Message{{Role: "user", Content: evalPrompt}})
-		if err != nil {
-			evalErr = err
-			log.Printf("drill evaluate error: %v", err)
-			return
-		}
-
-		cleaned := strings.TrimSpace(result)
+	if err == nil {
+		cleaned := strings.TrimSpace(markResult)
 		if strings.HasPrefix(cleaned, "```") {
 			lines := strings.Split(cleaned, "\n")
 			if len(lines) > 2 {
 				cleaned = strings.Join(lines[1:len(lines)-1], "\n")
 			}
 		}
+		var parsed struct {
+			Correct bool `json:"correct"`
+		}
+		if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
+			log.Printf("drill mark parse error: %v, raw: %s", err, markResult)
+		} else {
+			correct = parsed.Correct
+		}
+	}
 
+	markData, _ := json.Marshal(map[string]interface{}{
+		"type":    "mark",
+		"correct": correct,
+	})
+	writeSSE(w, flusher, string(markData))
+
+	// Step 2: stream coaching feedback aligned with correctness
+	system := prompts.DrillFeedback(body.PatternName, body.Question, body.Answer, correct)
+	feedbackCtx := llm.WithModelProfile(ctx, llm.ModelProfileFast)
+	feedbackCtx = llm.WithMaxTokens(feedbackCtx, drillFeedbackMaxToken)
+	feedbackCtx = llm.WithPurpose(feedbackCtx, llm.PurposeDrillFeedback)
+	_, streamErr := d.client.StreamCompletion(feedbackCtx, system, []llm.Message{{Role: "user", Content: body.Answer}}, func(chunk string) {
+		data, _ := json.Marshal(map[string]string{"type": "chunk", "text": chunk})
+		writeSSE(w, flusher, string(data))
+	})
+	if streamErr != nil {
+		log.Printf("drill feedback stream error: %v", streamErr)
+	}
+
+	// Step 3: decide mastery and next question
+	evalPrompt := prompts.DrillEvaluate(body.PatternName, body.Explanation, body.Question, body.Answer, string(historyJSON))
+	evalCtx := llm.WithModelProfile(ctx, llm.ModelProfileFast)
+	evalCtx = llm.WithMaxTokens(evalCtx, drillEvalMaxTokens)
+	evalCtx = llm.WithPurpose(evalCtx, llm.PurposeDrillEvaluate)
+	evalResult, err := d.client.Complete(evalCtx, "", []llm.Message{{Role: "user", Content: evalPrompt}})
+	if err != nil {
+		log.Printf("drill evaluate error: %v", err)
+	}
+
+	if err == nil {
+		cleaned := strings.TrimSpace(evalResult)
+		if strings.HasPrefix(cleaned, "```") {
+			lines := strings.Split(cleaned, "\n")
+			if len(lines) > 2 {
+				cleaned = strings.Join(lines[1:len(lines)-1], "\n")
+			}
+		}
 		var parsed struct {
 			Correct      bool   `json:"correct"`
 			Mastered     bool   `json:"mastered"`
 			NextQuestion string `json:"next_question"`
 		}
 		if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
-			log.Printf("drill evaluate parse error: %v, raw: %s", err, result)
-			return
+			log.Printf("drill evaluate parse error: %v, raw: %s", err, evalResult)
+		} else {
+			mastered = parsed.Mastered
+			nextQuestion = parsed.NextQuestion
 		}
-		correct = parsed.Correct
-		mastered = parsed.Mastered
-		nextQuestion = parsed.NextQuestion
-	}()
-
-	wg.Wait()
-	_ = evalErr
+	}
 
 	if mastered && len(body.VocabIDs) > 0 {
 		if err := d.store.MarkVocabLearnt(body.VocabIDs); err != nil {
@@ -200,11 +240,18 @@ func (d *DrillHandler) Turn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if !mastered && strings.TrimSpace(nextQuestion) == "" {
+		nextQuestion = body.Question
+	}
+
 	// If mastered, stream a transitional celebration message before the result event
 	if mastered {
 		writeSSE(w, flusher, `{"type":"transition_start"}`)
 		transSystem := prompts.DrillTransition(body.PatternName)
-		_, transErr := d.client.StreamCompletion(ctx, transSystem, []llm.Message{{Role: "user", Content: "next"}}, func(chunk string) {
+		transCtx := llm.WithModelProfile(ctx, llm.ModelProfileFast)
+		transCtx = llm.WithMaxTokens(transCtx, drillTransitionMaxTok)
+		transCtx = llm.WithPurpose(transCtx, llm.PurposeDrillTransition)
+		_, transErr := d.client.StreamCompletion(transCtx, transSystem, []llm.Message{{Role: "user", Content: "next"}}, func(chunk string) {
 			data, _ := json.Marshal(map[string]string{"type": "transition_chunk", "text": chunk})
 			writeSSE(w, flusher, string(data))
 		})

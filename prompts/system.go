@@ -44,9 +44,13 @@ Text to analyse:
 
 Return a JSON array of corrections. Each correction object must have:
 - "original": the incorrect word or phrase as written
-- "corrected": the correct form
+- "corrected": exactly one corrected form as a plain string
 - "explanation": a brief explanation in English (1 sentence max)
 - "category": one of: grammar | vocabulary | gender | spelling | register
+
+Rules:
+- The "corrected" field must contain one value only.
+- Never include alternatives like "x or y", slash-separated options, or multiple candidates.
 
 Return ONLY the JSON array. No preamble, no markdown. If there are no errors, return an empty array [].
 
@@ -87,6 +91,9 @@ Task:
 2. Write a 2-3 sentence explanation of the pattern in Spanish (B2 level, warm tone).
 3. Write one practice question in Spanish that requires applying the correct rule.
    Question types: fill-in-the-blank, translate a short phrase, or correct an error.
+   The prompt must test the exact confusing element directly (article/preposition/verb form, etc.).
+   Do NOT give away the target token inside the sentence stem or a word bank.
+   If the pattern is article/preposition confusion, the learner must produce that article/preposition themselves.
 
 Return ONLY valid JSON — no markdown, no preamble:
 {
@@ -122,7 +129,10 @@ Decide:
 1. correct — did the learner apply the rule correctly? (true/false)
 2. mastered — has the learner demonstrated clear understanding across this conversation? (true/false)
    Set mastered=true only after at least one correct answer and no persistent confusion.
-3. next_question — if not mastered, provide a new question on the same pattern (different from previous ones).
+3. next_question — if not mastered, provide a new question on the same pattern.
+   It must be clearly different from previous wording and should target the specific weakness shown.
+   Do not include the exact target word/form as a giveaway in the prompt.
+   Prefer prompts that force the learner to produce the confusing element, not just copy surrounding words.
    Leave empty string if mastered.
 
 Return ONLY valid JSON:
@@ -148,18 +158,18 @@ Return ONLY valid JSON:
 	return buf.String()
 }
 
-// DrillFeedback returns a system prompt for streaming warm feedback on a drill answer.
-func DrillFeedback(patternName, question, answer string) string {
-	tmpl := template.Must(template.New("drillfeedback").Parse(`You are an encouraging Spanish language drill coach giving feedback on a learner's answer.
+// DrillMark returns a lightweight prompt for quickly judging whether the answer is correct.
+func DrillMark(patternName, question, answer string) string {
+	tmpl := template.Must(template.New("drillmark").Parse(`You are quickly checking a Spanish drill answer.
 
 Pattern being drilled: {{.PatternName}}
 Question asked: {{.Question}}
 Learner's answer: {{.Answer}}
 
-Give 1-3 sentences of warm, specific feedback in Spanish:
-- If correct: confirm what they did right, reinforce the rule briefly.
-- If wrong: gently point out the error and restate the rule.
-Do not ask a new question. Do not use English.`))
+Return ONLY valid JSON with your correctness judgment:
+{"correct": true}
+
+Mark as false if the learner avoided or got wrong the key target in this pattern.`))
 
 	var buf strings.Builder
 	err := tmpl.Execute(&buf, struct {
@@ -170,6 +180,39 @@ Do not ask a new question. Do not use English.`))
 		PatternName: patternName,
 		Question:    question,
 		Answer:      answer,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
+// DrillFeedback returns a system prompt for streaming warm feedback on a drill answer.
+func DrillFeedback(patternName, question, answer string, correct bool) string {
+	tmpl := template.Must(template.New("drillfeedback").Parse(`You are an encouraging Spanish language drill coach giving feedback on a learner's answer.
+
+Pattern being drilled: {{.PatternName}}
+Question asked: {{.Question}}
+Learner's answer: {{.Answer}}
+Pre-check correctness: {{.Correct}}
+
+Give 1-3 sentences of warm, specific feedback in Spanish:
+- If correct: confirm what they did right, reinforce the rule briefly.
+- If wrong: begin with encouragement, then gently point out the error and restate the rule clearly.
+The feedback must align with the pre-check correctness.
+Do not ask a new question. Do not use English.`))
+
+	var buf strings.Builder
+	err := tmpl.Execute(&buf, struct {
+		PatternName string
+		Question    string
+		Answer      string
+		Correct     bool
+	}{
+		PatternName: patternName,
+		Question:    question,
+		Answer:      answer,
+		Correct:     correct,
 	})
 	if err != nil {
 		panic(err)

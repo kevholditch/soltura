@@ -33,19 +33,51 @@ type delta struct {
 }
 
 type Client struct {
-	apiKey  string
-	baseURL string
-	model   string
-	http    *http.Client
+	apiKey      string
+	baseURL     string
+	strongModel string
+	fastModel   string
+	http        *http.Client
 }
 
-func NewClient(apiKey string) *Client {
-	return &Client{
-		apiKey:  apiKey,
-		baseURL: "https://api.anthropic.com/v1/messages",
-		model:   "claude-sonnet-4-6",
-		http:    &http.Client{Timeout: 0}, // no timeout on client, use ctx
+const (
+	DefaultStrongModel = "claude-sonnet-4-6"
+	DefaultFastModel   = "claude-haiku-4-5"
+)
+
+// ResolveModels applies Anthropic model defaults for strong/fast lanes.
+func ResolveModels(strongModel, fastModel string) (string, string) {
+	if strongModel == "" {
+		strongModel = DefaultStrongModel
 	}
+	if fastModel == "" {
+		fastModel = DefaultFastModel
+	}
+	return strongModel, fastModel
+}
+
+func NewClient(apiKey, strongModel, fastModel string) *Client {
+	strongModel, fastModel = ResolveModels(strongModel, fastModel)
+
+	return &Client{
+		apiKey:      apiKey,
+		baseURL:     "https://api.anthropic.com/v1/messages",
+		strongModel: strongModel,
+		fastModel:   fastModel,
+		http:        &http.Client{Timeout: 0}, // no timeout on client, use ctx
+	}
+}
+
+func (c *Client) modelFor(ctx context.Context) string {
+	profile := llm.ModelProfileFromContext(ctx, llm.ModelProfileStrong)
+	if profile == llm.ModelProfileFast && c.fastModel != "" {
+		return c.fastModel
+	}
+	return c.strongModel
+}
+
+func (c *Client) shouldRetryWithStrong(requestedModel string) bool {
+	return requestedModel != "" && requestedModel == c.fastModel && c.strongModel != "" && c.strongModel != requestedModel
 }
 
 // post marshals req, sets auth headers, executes the request, and returns the
@@ -83,13 +115,22 @@ func (c *Client) post(ctx context.Context, req request) (*http.Response, error) 
 }
 
 func (c *Client) StreamCompletion(ctx context.Context, system string, messages []llm.Message, onChunk func(string)) (string, error) {
-	resp, err := c.post(ctx, request{
-		Model:     c.model,
-		MaxTokens: 4096,
+	maxTokens := llm.MaxTokensFromContext(ctx, 4096)
+	requestedModel := c.modelFor(ctx)
+	req := request{
+		Model:     requestedModel,
+		MaxTokens: maxTokens,
 		System:    system,
 		Messages:  messages,
 		Stream:    true,
-	})
+	}
+
+	resp, err := c.post(ctx, req)
+	if err != nil && c.shouldRetryWithStrong(requestedModel) {
+		log.Printf("anthropic fast model request failed (%s), retrying with strong model (%s): %v", requestedModel, c.strongModel, err)
+		req.Model = c.strongModel
+		resp, err = c.post(ctx, req)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -127,13 +168,22 @@ func (c *Client) StreamCompletion(ctx context.Context, system string, messages [
 }
 
 func (c *Client) Complete(ctx context.Context, system string, messages []llm.Message) (string, error) {
-	resp, err := c.post(ctx, request{
-		Model:     c.model,
-		MaxTokens: 1000,
+	maxTokens := llm.MaxTokensFromContext(ctx, 1000)
+	requestedModel := c.modelFor(ctx)
+	req := request{
+		Model:     requestedModel,
+		MaxTokens: maxTokens,
 		System:    system,
 		Messages:  messages,
 		Stream:    false,
-	})
+	}
+
+	resp, err := c.post(ctx, req)
+	if err != nil && c.shouldRetryWithStrong(requestedModel) {
+		log.Printf("anthropic fast model request failed (%s), retrying with strong model (%s): %v", requestedModel, c.strongModel, err)
+		req.Model = c.strongModel
+		resp, err = c.post(ctx, req)
+	}
 	if err != nil {
 		return "", err
 	}

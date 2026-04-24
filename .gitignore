@@ -11,3 +11,7 @@ web/
 
 # Node dependencies
 frontend/node_modules/
+
+# Playwright outputs
+frontend/test-results/
+frontend/playwright-report/

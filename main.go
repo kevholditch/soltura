@@ -15,6 +15,7 @@ import (
 	"soltura/llm"
 	"soltura/ollama"
 	"soltura/store"
+	"soltura/testllm"
 )
 
 func loadEnv() {
@@ -66,11 +67,23 @@ func newLLMClient() (llm.Completer, func()) {
 		if apiKey == "" {
 			log.Fatal("ANTHROPIC_API_KEY environment variable is required when LLM_BACKEND=anthropic")
 		}
-		log.Printf("LLM backend: anthropic")
-		return anthropic.NewClient(apiKey), func() {}
+		strongModel, fastModel := anthropic.ResolveModels(
+			os.Getenv("ANTHROPIC_MODEL_STRONG"),
+			os.Getenv("ANTHROPIC_MODEL_FAST"),
+		)
+		log.Printf("LLM backend: anthropic  strong_model=%s  fast_model=%s", strongModel, fastModel)
+		return anthropic.NewClient(apiKey, strongModel, fastModel), func() {}
+
+	case "test":
+		client, err := testllm.NewClientFromEnv()
+		if err != nil {
+			log.Fatalf("test backend: %v", err)
+		}
+		log.Printf("LLM backend: test  fixture=%s", os.Getenv("TEST_FIXTURE_PATH"))
+		return client, func() {}
 
 	default:
-		log.Fatalf("unknown LLM_BACKEND %q — valid values: anthropic, ollama", backend)
+		log.Fatalf("unknown LLM_BACKEND %q — valid values: anthropic, ollama, test", backend)
 		return nil, func() {}
 	}
 }
@@ -78,7 +91,12 @@ func newLLMClient() (llm.Completer, func()) {
 func main() {
 	loadEnv()
 
-	sqliteStore, err := store.NewSQLiteStore("./spanish.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./spanish.db"
+	}
+
+	sqliteStore, err := store.NewSQLiteStore(dbPath)
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
@@ -115,8 +133,14 @@ func main() {
 
 	r.Handle("/*", http.FileServer(http.Dir("./web")))
 
-	log.Println("Starting on :8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + strings.TrimPrefix(port, ":")
+
+	log.Printf("Starting on %s", addr)
+	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

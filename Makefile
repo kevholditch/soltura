@@ -1,7 +1,7 @@
 OLLAMA_MODEL := gemma3:12b
 BACKEND      := $(filter anthropic,$(MAKECMDGOALS))
 
-.PHONY: install-model run anthropic build dev build-frontend
+.PHONY: install-model run anthropic build dev build-frontend install-playwright test-go test-e2e test-all
 
 # No-op target so Make doesn't error when "anthropic" appears on the command line
 anthropic:
@@ -52,3 +52,19 @@ install-model:
 	@echo "Pulling $(OLLAMA_MODEL) (this may take a while on first run)..."
 	ollama pull $(OLLAMA_MODEL)
 	@echo "Done. Run: make dev"
+
+## test-go: run Go unit tests
+test-go:
+	go test ./...
+
+## install-playwright: install frontend deps + Playwright browser/runtime
+install-playwright:
+	cd frontend && npm ci
+	cd frontend && npx playwright install --with-deps chromium
+
+## test-e2e: run Playwright end-to-end tests
+test-e2e: frontend/node_modules
+	cd frontend && npm run test:e2e
+
+## test-all: run all test suites
+test-all: test-go test-e2e
