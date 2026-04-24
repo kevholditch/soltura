@@ -63,7 +63,7 @@ install-playwright:
 	cd frontend && npx playwright install --with-deps chromium
 
 ## test-e2e: run Playwright end-to-end tests
-test-e2e: frontend/node_modules
+test-e2e: build-frontend
 	cd frontend && npm run test:e2e
 
 ## test-all: run all test suites

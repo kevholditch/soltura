@@ -1,78 +1,144 @@
 # Soltura
 
-A personal Spanish language learning companion. You write in Spanish, the AI responds naturally in Spanish, silently analyses your errors, and logs corrections to a persistent vocabulary store. At the end of each session you get a concise summary of what went well and what to focus on next.
+Soltura is a Spanish language learning companion built around realistic conversation plus targeted practice. You chat in Spanish, get silent correction analysis, track recurring mistakes in SQLite, and drill weak patterns until they are mastered.
 
-## Features
+## Current Features
 
-- Streaming conversation in Spanish at C1/B2 level
-- Silent error analysis running in parallel with the conversation stream
-- Persistent vocabulary store — repeated mistakes are tracked by frequency
-- End-of-session summary with corrections grouped by category
-- Vocabulary review screen showing all corrections sorted by times seen
+- Real-time Spanish conversation over SSE with incremental assistant streaming
+- Parallel correction analysis per turn (grammar/vocabulary/gender/spelling/register)
+- Corrections timeline in-chat plus vocabulary review across sessions
+- Session summary generation at end of conversation
+- Drill mode:
+  - pattern selection from unlearnt vocab
+  - quick correctness mark
+  - streamed coaching feedback
+  - mastery tracking and transition to next pattern
+- Deterministic `LLM_BACKEND=test` mode with fixture-driven responses for full e2e testing
 
 ## Tech Stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | HTML + TailwindCSS (CDN) + vanilla JS |
-| Backend | Go with Chi router |
-| Persistence | SQLite (pure Go, no CGo) |
-| AI | Anthropic API (claude-sonnet-4-6) |
+| Frontend | React 18 + Vite + TailwindCSS |
+| Backend | Go + Chi router |
+| Persistence | SQLite (`modernc.org/sqlite`, no CGO) |
+| LLM Backends | Anthropic, Ollama, deterministic fixture-backed test backend |
 | Streaming | Server-Sent Events |
+| E2E Testing | Playwright |
+| CI | GitHub Actions (`.github/workflows/tests.yml`) |
 
-## Prerequisites
+## LLM Backends
+
+`LLM_BACKEND` supports:
+
+- `anthropic` (default when running `go run .`)
+- `ollama`
+- `test` (fixture-backed deterministic mode for testing)
+
+Anthropic supports strong/fast model lanes:
+
+- strong: `ANTHROPIC_MODEL_STRONG` (default `claude-sonnet-4-6`)
+- fast: `ANTHROPIC_MODEL_FAST` (default `claude-haiku-4-5`)
+
+## Configuration
+
+Common environment variables:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PORT` | `8080` | HTTP listen port |
+| `DB_PATH` | `./spanish.db` | SQLite file path |
+| `LLM_BACKEND` | `anthropic` | `anthropic`, `ollama`, or `test` |
+| `ANTHROPIC_API_KEY` | (none) | Required for `LLM_BACKEND=anthropic` |
+| `ANTHROPIC_MODEL_STRONG` | `claude-sonnet-4-6` | Optional |
+| `ANTHROPIC_MODEL_FAST` | `claude-haiku-4-5` | Optional |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Used for `LLM_BACKEND=ollama` |
+| `OLLAMA_MODEL` | `gemma3:12b` | Used for `LLM_BACKEND=ollama` |
+| `TEST_FIXTURE_PATH` | `testdata/llm/default.json` | Used for `LLM_BACKEND=test` |
+
+## Local Development
+
+Prerequisites:
 
 - Go 1.22+
-- An [Anthropic API key](https://console.anthropic.com/)
+- Node.js 20+ (for frontend build + Playwright e2e)
 
-## Setup
+Clone:
 
 ```bash
 git clone https://github.com/kevholditch/soltura.git
 cd soltura
+```
 
-# Create a .env file with your API key
-echo "ANTHROPIC_API_KEY=your_key_here" > .env
+Run options:
 
-# Run
-go run .
+```bash
+# Option 1: Anthropic backend (go run defaults to anthropic)
+ANTHROPIC_API_KEY=your_key_here go run .
+
+# Option 2: Local Ollama backend (via Make)
+make run
+
+# Option 3: Vite dev + backend
+make dev
 ```
 
 Open [http://localhost:8080](http://localhost:8080).
 
-## Usage
+## Testing
 
-1. **Start a session** — enter a topic (e.g. "my weekend plans", "favourite films") and click Start
-2. **Converse** — write in Spanish, press Cmd+Enter (or the Send button) to submit
-3. **Review corrections** — any errors appear below each agent reply with category badges
-4. **End the session** — click End Session to get a summary and stats
-5. **Vocabulary** — click Vocabulary in the nav to see all corrections sorted by frequency
+```bash
+# Go unit tests
+make test-go
 
-## Project Structure
+# Install Playwright deps + Chromium
+make install-playwright
 
+# Playwright e2e
+make test-e2e
+
+# All tests
+make test-all
 ```
+
+The CI workflow runs `make install-playwright` and `make test-all` on every push and pull request.
+
+## Main Make Targets
+
+- `make build` — build frontend and Go binary
+- `make run` — run app with Ollama backend
+- `make run anthropic` — run app with Anthropic backend
+- `make dev` — Vite + backend local dev
+- `make install-model` — install/start Ollama and pull configured model
+- `make test-go` — Go test suite
+- `make install-playwright` — Playwright/browser setup
+- `make test-e2e` — Playwright e2e suite
+- `make test-all` — combined tests
+
+## API Endpoints
+
+- `POST /api/sessions`
+- `POST /api/sessions/{sessionID}/turns` (SSE)
+- `POST /api/sessions/{sessionID}/end`
+- `GET /api/sessions/{sessionID}/summary`
+- `GET /api/vocab`
+- `GET /api/drills/phrases`
+- `POST /api/drills/start`
+- `POST /api/drills/turn` (SSE)
+
+## Project Layout
+
+```text
 .
-├── main.go               # Server entrypoint, routing
-├── anthropic/client.go   # Anthropic API client (streaming + non-streaming)
+├── main.go
 ├── handlers/
-│   ├── session.go        # Session create, SSE turn stream, end
-│   ├── summary.go        # Session summary generation
-│   └── vocabulary.go     # Vocabulary list endpoint
-├── models/models.go      # Shared structs
-├── prompts/system.go     # Prompt templates
-├── store/sqlite.go       # SQLite persistence layer
-└── web/
-    ├── index.html        # Single-page app shell
-    ├── app.js            # Frontend logic
-    └── style.css         # Component styles
+├── store/
+├── llm/
+├── anthropic/
+├── ollama/
+├── testllm/             # deterministic fixture-backed backend
+├── testdata/llm/        # fixture scripts for test backend
+├── frontend/            # React + Vite app + Playwright tests
+├── web/                 # built frontend output
+└── .github/workflows/   # CI workflows
 ```
-
-## Correction Categories
-
-| Category | Colour | Description |
-|---|---|---|
-| grammar | amber | Wrong tense, mood, conjugation |
-| vocabulary | blue | Wrong word choice |
-| gender | purple | Noun/adjective gender agreement |
-| spelling | red | Spelling errors |
-| register | green | Formality level mismatch |
