@@ -90,10 +90,18 @@ Task:
    Prioritise by total seen_count across grouped errors.
 2. Write a 2-3 sentence explanation of the pattern in Spanish (B2 level, warm tone).
 3. Write one practice question in Spanish that requires applying the correct rule.
-   Question types: fill-in-the-blank, translate a short phrase, or correct an error.
+   Question type: fill-in-the-blank only.
+   The question must contain exactly one blank written as ___.
+   The learner's expected answer must be one or two words, never a full sentence.
+   The blank must replace the target token(s) from the corrected phrase, not a helper phrase before the target.
+   The sentence around ___ must be understandable on its own.
    The prompt must test the exact confusing element directly (article/preposition/verb form, etc.).
+   Do not ask the learner to rewrite or transform a full sentence.
+   Do not use quotation marks or dialogue fragments around the blank.
    Do NOT give away the target token inside the sentence stem or a word bank.
    If the pattern is article/preposition confusion, the learner must produce that article/preposition themselves.
+   Bad: "Yo respondí: '___ que sí, definitivamente estaré allí.'" because the learner is guessing a helper phrase.
+   Good: "Mi amiga preguntó si vendría a la fiesta. Respondí que ___." because the missing answer is the target token.
 
 Return ONLY valid JSON — no markdown, no preamble:
 {
@@ -131,6 +139,12 @@ Decide:
    Set mastered=true only after at least one correct answer and no persistent confusion.
 3. next_question — if not mastered, provide a new question on the same pattern.
    It must be clearly different from previous wording and should target the specific weakness shown.
+   It must be fill-in-the-blank only, with exactly one blank written as ___.
+   The learner's expected answer must be one or two words, never a full sentence.
+   The blank must replace the target token(s), not a helper phrase before the target.
+   The sentence around ___ must be understandable on its own.
+   Do not ask the learner to rewrite or transform a full sentence.
+   Do not use quotation marks or dialogue fragments around the blank.
    Do not include the exact target word/form as a giveaway in the prompt.
    Prefer prompts that force the learner to produce the confusing element, not just copy surrounding words.
    Leave empty string if mastered.
@@ -198,8 +212,9 @@ Pre-check correctness: {{.Correct}}
 
 Give 1-3 sentences of warm, specific feedback in Spanish:
 - If correct: confirm what they did right, reinforce the rule briefly.
-- If wrong: begin with encouragement, then gently point out the error and restate the rule clearly.
+- If wrong: begin with encouragement, then gently point out the error, give the expected one- or two-word answer, and restate the rule clearly.
 The feedback must align with the pre-check correctness.
+If Pre-check correctness is false, do not say the learner's answer is perfect or correct.
 Do not ask a new question. Do not use English.`))
 
 	var buf strings.Builder

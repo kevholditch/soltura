@@ -3,10 +3,28 @@ package models
 import "time"
 
 type Session struct {
-	ID        string     `json:"id"`
-	Topic     string     `json:"topic"`
-	StartedAt time.Time  `json:"started_at"`
-	EndedAt   *time.Time `json:"ended_at,omitempty"`
+	ID          string     `json:"id"`
+	Topic       string     `json:"topic"`
+	StartedAt   time.Time  `json:"started_at"`
+	EndedAt     *time.Time `json:"ended_at,omitempty"`
+	SeedContent string     `json:"seed_content,omitempty"`
+}
+
+type SessionListItem struct {
+	ID              string     `json:"id"`
+	Topic           string     `json:"topic"`
+	StartedAt       time.Time  `json:"started_at"`
+	EndedAt         *time.Time `json:"ended_at,omitempty"`
+	TurnCount       int        `json:"turn_count"`
+	CorrectionCount int        `json:"correction_count"`
+	Categories      []string   `json:"categories"`
+}
+
+type SessionReview struct {
+	Session         Session  `json:"session"`
+	Turns           []Turn   `json:"turns"`
+	CorrectionCount int      `json:"correction_count"`
+	Categories      []string `json:"categories"`
 }
 
 type Turn struct {

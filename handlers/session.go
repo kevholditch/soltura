@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +38,31 @@ func writeSSE(w http.ResponseWriter, flusher http.Flusher, data string) {
 	flusher.Flush()
 }
 
+// List handles GET /api/sessions
+func (s *SessionHandler) List(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if rawLimit := r.URL.Query().Get("limit"); rawLimit != "" {
+		parsedLimit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid limit"})
+			return
+		}
+		limit = parsedLimit
+	}
+
+	sessions, err := s.store.ListSessions(limit)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string][]models.SessionListItem{"sessions": sessions})
+}
+
 // Create handles POST /api/sessions
 func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -62,6 +89,12 @@ func (s *SessionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	seedCtx = llm.WithPurpose(seedCtx, llm.PurposeSessionSeed)
 	seedContent, err := s.client.Complete(seedCtx, "", []llm.Message{{Role: "user", Content: prompt}})
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.store.SetSessionSeedContent(session.ID, seedContent); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -191,6 +224,26 @@ func (s *SessionHandler) Turn(w http.ResponseWriter, r *http.Request) {
 	writeSSE(w, flusher, string(corrData))
 
 	writeSSE(w, flusher, `{"type":"done"}`)
+}
+
+// Review handles GET /api/sessions/{sessionID}/review
+func (s *SessionHandler) Review(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "sessionID")
+
+	review, err := s.store.GetSessionReview(sessionID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(err.Error(), "session not found") {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(review)
 }
 
 // End handles POST /api/sessions/{sessionID}/end

@@ -25,8 +25,12 @@ func (v *VocabHandler) List(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
+	sort := r.URL.Query().Get("sort")
+	if sort == "" {
+		sort = "recent"
+	}
 
-	entries, err := v.store.GetVocab(limit)
+	entries, err := v.store.GetVocabSorted(limit, sort)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

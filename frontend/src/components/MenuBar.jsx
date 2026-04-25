@@ -1,4 +1,4 @@
-import { BookOpen, Dumbbell, MessageCirclePlus, Moon, Sun } from 'lucide-react'
+import { BookOpen, Dumbbell, History, MessageCirclePlus, Moon, Sun } from 'lucide-react'
 
 function menuButtonClass(active = false) {
   const base = 'inline-flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-md font-mono text-sm transition-colors'
@@ -8,7 +8,9 @@ function menuButtonClass(active = false) {
   return `${base} text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800`
 }
 
-export default function MenuBar({ activeView, theme, onNewSession, onDrillsStart, onVocabularyOpen, onThemeToggle }) {
+export default function MenuBar({ activeView, theme, onNewSession, onDrillsStart, onVocabularyOpen, onJournalOpen, onThemeToggle }) {
+  const journalActive = activeView === 'journal' || activeView === 'sessionReview'
+
   return (
     <nav className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 sticky top-0 z-10">
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
@@ -37,6 +39,14 @@ export default function MenuBar({ activeView, theme, onNewSession, onDrillsStart
           >
             <BookOpen size={16} />
             <span className="hidden md:inline">Vocabulary</span>
+          </button>
+          <button
+            onClick={onJournalOpen}
+            aria-label="Journal"
+            className={menuButtonClass(journalActive)}
+          >
+            <History size={16} />
+            <span className="hidden md:inline">Journal</span>
           </button>
           <button
             onClick={onThemeToggle}

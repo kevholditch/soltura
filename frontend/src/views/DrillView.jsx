@@ -55,6 +55,55 @@ function composeAnswer(blankAnswers) {
     .trim()
 }
 
+function SubmittedQuestionContent({ item }) {
+  const template = parseQuestionTemplate(item.content)
+  const submittedAnswers = item.submittedAnswers ?? []
+
+  if (!item.submitted) {
+    return <div>{item.content}</div>
+  }
+
+  if (template.hasInlineBlanks) {
+    let blankIndex = -1
+    return (
+      <div className="drill-inline-question">
+        {template.segments.map((segment, segmentIdx) => {
+          if (segment.type === 'text') {
+            return <span key={segmentIdx}>{segment.value}</span>
+          }
+
+          blankIndex += 1
+          return (
+            <input
+              key={segmentIdx}
+              type="text"
+              value={submittedAnswers[blankIndex] ?? ''}
+              disabled
+              readOnly
+              className="drill-inline-input drill-inline-input-submitted"
+              aria-label={`Submitted answer ${blankIndex + 1}`}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div>{item.content}</div>
+      <input
+        type="text"
+        value={item.answer ?? composeAnswer(submittedAnswers)}
+        disabled
+        readOnly
+        className="drill-inline-input drill-inline-input-full drill-inline-input-submitted"
+        aria-label="Submitted answer"
+      />
+    </>
+  )
+}
+
 function markLastQuestion(history, attrs) {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     if (history[i].kind === 'question') {
@@ -66,7 +115,7 @@ function markLastQuestion(history, attrs) {
   return history
 }
 
-export default function DrillView({ onExit }) {
+export default function DrillView({ onExit, initialVocabIds = [] }) {
   const [phase, setPhase] = useState('loading')
   const [patternName, setPatternName] = useState('')
   const [explanation, setExplanation] = useState('')
@@ -123,7 +172,12 @@ export default function DrillView({ onExit }) {
     setPhraseIndex(0)
     setTransitionText('')
     try {
-      const res = await fetch('/api/drills/start', { method: 'POST' })
+      const body = initialVocabIds.length > 0 ? JSON.stringify({ vocab_ids: initialVocabIds }) : undefined
+      const res = await fetch('/api/drills/start', {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body,
+      })
       if (!res.ok) throw new Error(`Server error: ${res.status}`)
       const data = await res.json()
       if (data.all_done) {
@@ -186,7 +240,13 @@ export default function DrillView({ onExit }) {
     setFeedbackText('')
     setTransitionText('')
 
-    const submittedHistory = markLastQuestion(drillHistory, { submitted: true, correct: null })
+    const submittedAnswers = blankAnswers.map(value => value.trim())
+    const submittedHistory = markLastQuestion(drillHistory, {
+      submitted: true,
+      correct: null,
+      submittedAnswers,
+      answer: trimmed,
+    })
     setDrillHistory(submittedHistory)
     setPhase('feedback')
 
@@ -455,7 +515,9 @@ export default function DrillView({ onExit }) {
                   return (
                     <div key={idx} className="agent-message">
                       <div className="drill-question-row">
-                        <div className={bubbleClass}>{item.content}</div>
+                        <div className={bubbleClass}>
+                          <SubmittedQuestionContent item={item} />
+                        </div>
                         {showQuestionMark && (
                           <span className={`drill-question-mark ${item.correct ? 'drill-question-mark-correct' : 'drill-question-mark-wrong'}`}>
                             {item.correct ? '✓' : '✗'}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"soltura/llm"
+	"soltura/models"
 	"soltura/prompts"
 	"soltura/store"
 )
@@ -60,7 +61,20 @@ func (d *DrillHandler) Phrases(w http.ResponseWriter, r *http.Request) {
 func (d *DrillHandler) Start(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	vocab, err := d.store.GetUnlearntVocab(drillStartVocabLimit)
+	var body struct {
+		VocabIDs *[]string `json:"vocab_ids"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	var vocab []models.VocabEntry
+	var err error
+	if body.VocabIDs != nil {
+		vocab, err = d.store.GetVocabByIDs(*body.VocabIDs)
+	} else {
+		vocab, err = d.store.GetUnlearntVocab(drillStartVocabLimit)
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

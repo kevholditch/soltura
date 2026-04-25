@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,9 @@ type Store interface {
 	CreateSession(topic string) (*models.Session, error)
 	EndSession(sessionID string) error
 	GetSession(sessionID string) (*models.Session, error)
+	SetSessionSeedContent(sessionID, seedContent string) error
+	ListSessions(limit int) ([]models.SessionListItem, error)
+	GetSessionReview(sessionID string) (*models.SessionReview, error)
 
 	SaveTurn(sessionID, userText, agentReply string, corrections []models.Correction) (*models.Turn, error)
 	GetTurns(sessionID string) ([]models.Turn, error)
@@ -24,6 +28,8 @@ type Store interface {
 
 	UpsertVocab(corrections []models.Correction) error
 	GetVocab(limit int) ([]models.VocabEntry, error)
+	GetVocabSorted(limit int, sort string) ([]models.VocabEntry, error)
+	GetVocabByIDs(ids []string) ([]models.VocabEntry, error)
 	GetVocabCount() (int, error)
 
 	GetUnlearntVocab(limit int) ([]models.VocabEntry, error)
@@ -35,7 +41,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     topic TEXT NOT NULL,
     started_at DATETIME NOT NULL,
-    ended_at DATETIME
+    ended_at DATETIME,
+    seed_content TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS turns (
@@ -91,6 +98,16 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("run schema: %w", err)
+	}
+
+	var sessionSeedColCount int
+	sessionSeedRow := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='seed_content'`)
+	sessionSeedRow.Scan(&sessionSeedColCount) //nolint:errcheck
+	if sessionSeedColCount == 0 {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN seed_content TEXT NOT NULL DEFAULT ''`); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate sessions seed_content: %w", err)
+		}
 	}
 
 	// Migrate: add learnt columns to vocab if missing
@@ -149,16 +166,108 @@ func (s *SQLiteStore) EndSession(sessionID string) error {
 
 // GetSession returns the session with the given ID.
 func (s *SQLiteStore) GetSession(sessionID string) (*models.Session, error) {
-	row := s.db.QueryRow(`SELECT id, topic, started_at, ended_at FROM sessions WHERE id = ?`, sessionID)
+	row := s.db.QueryRow(`SELECT id, topic, started_at, ended_at, seed_content FROM sessions WHERE id = ?`, sessionID)
 	return scanSession(row)
+}
+
+// SetSessionSeedContent stores the assistant's opening message for later review.
+func (s *SQLiteStore) SetSessionSeedContent(sessionID, seedContent string) error {
+	res, err := s.db.Exec(`UPDATE sessions SET seed_content = ? WHERE id = ?`, seedContent, sessionID)
+	if err != nil {
+		return fmt.Errorf("set session seed content: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	return nil
+}
+
+// ListSessions returns recent sessions newest first. If limit <= 0 it defaults to 50.
+func (s *SQLiteStore) ListSessions(limit int) ([]models.SessionListItem, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := s.db.Query(
+		`SELECT
+			s.id,
+			s.topic,
+			s.started_at,
+			s.ended_at,
+			COUNT(DISTINCT t.id) AS turn_count,
+			COUNT(c.id) AS correction_count
+		FROM sessions s
+		JOIN turns t ON t.session_id = s.id
+		LEFT JOIN corrections c ON c.turn_id = t.id
+		GROUP BY s.id, s.topic, s.started_at, s.ended_at
+		ORDER BY s.started_at DESC
+		LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query sessions: %w", err)
+	}
+	defer rows.Close()
+
+	sessions := []models.SessionListItem{}
+	for rows.Next() {
+		item, err := scanSessionListItemRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		item.Categories, err = s.getSessionCategories(item.ID)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sessions: %w", err)
+	}
+	return sessions, nil
+}
+
+// GetSessionReview returns a session and all turns with corrections for review.
+func (s *SQLiteStore) GetSessionReview(sessionID string) (*models.SessionReview, error) {
+	session, err := s.GetSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	turns, err := s.GetTurns(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	review := &models.SessionReview{
+		Session:    *session,
+		Turns:      turns,
+		Categories: []string{},
+	}
+	if review.Turns == nil {
+		review.Turns = []models.Turn{}
+	}
+	seenCategories := make(map[string]bool)
+	for _, turn := range turns {
+		for _, correction := range turn.Corrections {
+			review.CorrectionCount++
+			if correction.Category != "" && !seenCategories[correction.Category] {
+				seenCategories[correction.Category] = true
+				review.Categories = append(review.Categories, correction.Category)
+			}
+		}
+	}
+	return review, nil
 }
 
 func scanSession(row *sql.Row) (*models.Session, error) {
 	var sess models.Session
 	var startedAtStr string
 	var endedAtStr sql.NullString
+	var seedContent string
 
-	if err := row.Scan(&sess.ID, &sess.Topic, &startedAtStr, &endedAtStr); err != nil {
+	if err := row.Scan(&sess.ID, &sess.Topic, &startedAtStr, &endedAtStr, &seedContent); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("session not found")
 		}
@@ -178,8 +287,60 @@ func scanSession(row *sql.Row) (*models.Session, error) {
 		}
 		sess.EndedAt = &et
 	}
+	sess.SeedContent = seedContent
 
 	return &sess, nil
+}
+
+func scanSessionListItemRows(rows *sql.Rows) (models.SessionListItem, error) {
+	var item models.SessionListItem
+	var startedAtStr string
+	var endedAtStr sql.NullString
+
+	if err := rows.Scan(&item.ID, &item.Topic, &startedAtStr, &endedAtStr, &item.TurnCount, &item.CorrectionCount); err != nil {
+		return item, fmt.Errorf("scan session list item: %w", err)
+	}
+
+	t, err := time.Parse(time.RFC3339, startedAtStr)
+	if err != nil {
+		return item, fmt.Errorf("parse started_at: %w", err)
+	}
+	item.StartedAt = t
+
+	if endedAtStr.Valid {
+		et, err := time.Parse(time.RFC3339, endedAtStr.String)
+		if err != nil {
+			return item, fmt.Errorf("parse ended_at: %w", err)
+		}
+		item.EndedAt = &et
+	}
+
+	return item, nil
+}
+
+func (s *SQLiteStore) getSessionCategories(sessionID string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT category FROM corrections WHERE session_id = ? ORDER BY rowid ASC`, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("query session categories: %w", err)
+	}
+	defer rows.Close()
+
+	categories := []string{}
+	seen := make(map[string]bool)
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, fmt.Errorf("scan session category: %w", err)
+		}
+		if category != "" && !seen[category] {
+			seen[category] = true
+			categories = append(categories, category)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate session categories: %w", err)
+	}
+	return categories, nil
 }
 
 // SaveTurn inserts a turn and its corrections, then returns the populated Turn.
@@ -272,7 +433,7 @@ func (s *SQLiteStore) GetTurns(sessionID string) ([]models.Turn, error) {
 
 func (s *SQLiteStore) getTurnCorrections(turnID string) ([]models.Correction, error) {
 	rows, err := s.db.Query(
-		`SELECT id, turn_id, session_id, original, corrected, explanation, category FROM corrections WHERE turn_id = ?`,
+		`SELECT id, turn_id, session_id, original, corrected, explanation, category FROM corrections WHERE turn_id = ? ORDER BY rowid ASC`,
 		turnID,
 	)
 	if err != nil {
@@ -294,7 +455,7 @@ func (s *SQLiteStore) getTurnCorrections(turnID string) ([]models.Correction, er
 // GetCorrections returns all corrections for a session.
 func (s *SQLiteStore) GetCorrections(sessionID string) ([]models.Correction, error) {
 	rows, err := s.db.Query(
-		`SELECT id, turn_id, session_id, original, corrected, explanation, category FROM corrections WHERE session_id = ?`,
+		`SELECT id, turn_id, session_id, original, corrected, explanation, category FROM corrections WHERE session_id = ? ORDER BY rowid ASC`,
 		sessionID,
 	)
 	if err != nil {
@@ -322,7 +483,9 @@ func (s *SQLiteStore) UpsertVocab(corrections []models.Correction) error {
              VALUES (?, ?, ?, ?, ?, 1, ?)
              ON CONFLICT(original, corrected) DO UPDATE SET
                  seen_count = seen_count + 1,
-                 last_seen = excluded.last_seen`,
+                 last_seen = excluded.last_seen,
+                 learnt = 0,
+                 learnt_at = NULL`,
 			uuid.New().String(), c.Original, c.Corrected, c.Explanation, c.Category, now,
 		)
 		if err != nil {
@@ -335,11 +498,20 @@ func (s *SQLiteStore) UpsertVocab(corrections []models.Correction) error {
 // GetVocab returns vocab entries ordered by seen_count DESC, last_seen DESC.
 // If limit <= 0 it defaults to 20.
 func (s *SQLiteStore) GetVocab(limit int) ([]models.VocabEntry, error) {
+	return s.GetVocabSorted(limit, "frequency")
+}
+
+// GetVocabSorted returns vocab entries with an explicit sort order.
+func (s *SQLiteStore) GetVocabSorted(limit int, sort string) ([]models.VocabEntry, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	orderBy := `last_seen DESC, seen_count DESC`
+	if sort == "frequency" {
+		orderBy = `seen_count DESC, last_seen DESC`
+	}
 	rows, err := s.db.Query(
-		`SELECT id, original, corrected, explanation, category, seen_count, last_seen FROM vocab ORDER BY seen_count DESC, last_seen DESC LIMIT ?`,
+		`SELECT id, original, corrected, explanation, category, seen_count, last_seen, learnt, learnt_at FROM vocab ORDER BY `+orderBy+` LIMIT ?`,
 		limit,
 	)
 	if err != nil {
@@ -349,19 +521,80 @@ func (s *SQLiteStore) GetVocab(limit int) ([]models.VocabEntry, error) {
 
 	var entries []models.VocabEntry
 	for rows.Next() {
-		var e models.VocabEntry
-		var lastSeenStr string
-		if err := rows.Scan(&e.ID, &e.Original, &e.Corrected, &e.Explanation, &e.Category, &e.SeenCount, &lastSeenStr); err != nil {
-			return nil, fmt.Errorf("scan vocab: %w", err)
-		}
-		ls, err := time.Parse(time.RFC3339, lastSeenStr)
+		entry, err := scanVocabEntryRows(rows)
 		if err != nil {
-			return nil, fmt.Errorf("parse last_seen: %w", err)
+			return nil, err
 		}
-		e.LastSeen = ls
-		entries = append(entries, e)
+		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
+}
+
+// GetVocabByIDs returns unlearnt vocab entries matching the requested IDs.
+func (s *SQLiteStore) GetVocabByIDs(ids []string) ([]models.VocabEntry, error) {
+	if len(ids) == 0 {
+		return []models.VocabEntry{}, nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+
+	rows, err := s.db.Query(
+		`SELECT id, original, corrected, explanation, category, seen_count, last_seen, learnt, learnt_at
+		FROM vocab
+		WHERE learnt = 0 AND id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY last_seen DESC`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query vocab by ids: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []models.VocabEntry
+	for rows.Next() {
+		entry, err := scanVocabEntryRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate vocab by ids: %w", err)
+	}
+	return entries, nil
+}
+
+func scanVocabEntryRows(rows *sql.Rows) (models.VocabEntry, error) {
+	var entry models.VocabEntry
+	var lastSeenStr string
+	var learntInt int
+	var learntAtStr sql.NullString
+
+	if err := rows.Scan(&entry.ID, &entry.Original, &entry.Corrected, &entry.Explanation, &entry.Category, &entry.SeenCount, &lastSeenStr, &learntInt, &learntAtStr); err != nil {
+		return entry, fmt.Errorf("scan vocab: %w", err)
+	}
+
+	lastSeen, err := time.Parse(time.RFC3339, lastSeenStr)
+	if err != nil {
+		return entry, fmt.Errorf("parse last_seen: %w", err)
+	}
+	entry.LastSeen = lastSeen
+	entry.Learnt = learntInt != 0
+
+	if learntAtStr.Valid {
+		learntAt, err := time.Parse(time.RFC3339, learntAtStr.String)
+		if err != nil {
+			return entry, fmt.Errorf("parse learnt_at: %w", err)
+		}
+		entry.LearntAt = &learntAt
+	}
+
+	return entry, nil
 }
 
 // GetVocabCount returns the total number of distinct vocab entries.

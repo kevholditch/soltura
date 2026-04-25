@@ -77,7 +77,7 @@ export default function StartView({ onTopicSelected, onDrillsStart }) {
           ) : (
             <>
               <p className="text-gray-600 dark:text-gray-400 font-mono text-sm mb-6 leading-relaxed">
-                I'll analyse your most common mistakes and drill you on them until they stick. Each pattern is explained in Spanish, then you practise with questions until I'm confident you've got it.
+                Practice your common mistakes.
               </p>
               <button
                 onClick={onDrillsStart}

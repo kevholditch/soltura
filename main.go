@@ -122,7 +122,9 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	r.Get("/api/sessions", sessionHandler.List)
 	r.Post("/api/sessions", sessionHandler.Create)
+	r.Get("/api/sessions/{sessionID}/review", sessionHandler.Review)
 	r.Post("/api/sessions/{sessionID}/turns", sessionHandler.Turn)
 	r.Post("/api/sessions/{sessionID}/end", sessionHandler.End)
 	r.Get("/api/sessions/{sessionID}/summary", summaryHandler.Get)

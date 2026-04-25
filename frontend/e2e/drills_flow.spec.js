@@ -31,6 +31,7 @@ test('drills flow handles wrong then correct answer and reaches all done', async
 
   await expect(page.getByText(firstFeedback)).toBeVisible()
   await expect(page.getByText(questionLead(firstEval.next_question), { exact: false })).toBeVisible()
+  await expect(page.getByLabel('Submitted answer 1')).toHaveValue('a el')
 
   await page.getByLabel('Blank 1').fill('al')
   await page.getByRole('button', { name: 'Submit' }).click()
@@ -39,4 +40,13 @@ test('drills flow handles wrong then correct answer and reaches all done', async
   await expect(page.getByText('✓ Dominado')).toBeVisible()
 
   await expect(page.getByText('All done!')).toBeVisible({ timeout: 10_000 })
+})
+
+test('drills menu uses concise copy', async ({ page }) => {
+  await page.goto('/')
+
+  await page.locator('div').filter({ hasText: /^ChatDrills$/ }).getByRole('button', { name: 'Drills' }).click()
+
+  await expect(page.getByText('Practice your common mistakes')).toBeVisible()
+  await expect(page.getByText(/I'll analyse your most common mistakes/i)).toHaveCount(0)
 })
